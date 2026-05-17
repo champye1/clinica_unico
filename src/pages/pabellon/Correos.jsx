@@ -180,7 +180,7 @@ export default function Correos() {
       console.error('poll-gmail error completo:', e, JSON.stringify(e, Object.getOwnPropertyNames(e)))
       // Intentar extraer el body del error
       if (e?.context) {
-        try { const body = await e.context.json(); console.error('error body:', body) } catch {}
+        try { const body = await e.context.json(); console.error('error body:', body) } catch { /* no-op */ }
       }
       showError('Error al consultar Gmail: ' + (e?.message || 'Error desconocido'))
     } finally {

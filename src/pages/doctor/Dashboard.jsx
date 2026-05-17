@@ -4,6 +4,7 @@ import { Calendar, FileText, CheckCircle2, Clock } from 'lucide-react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { useTheme } from '../../contexts/ThemeContext'
+import { logger } from '../../utils/logger'
 
 export default function Dashboard() {
   const { theme } = useTheme()

@@ -231,7 +231,7 @@ const WeekView = ({ weekStart, cirugias, onDayClick, pabellones }) => {
 }
 
 // Componente DayView (Slots Horarios)
-const DayView = ({ day, pabellones, cirugias }) => {
+const DayView = ({ day, pabellones, cirugias, onCancelarClick }) => {
   // Generar slots de 08:00 a 20:00 cada 1 hora (simplificado)
   const slots = useMemo(() => {
     const hours = []
@@ -304,7 +304,7 @@ const DayView = ({ day, pabellones, cirugias }) => {
                 )}
                 {cirugia.estado === 'programada' && (
                   <button
-                    onClick={() => handleCancelarClick(cirugia)}
+                    onClick={() => onCancelarClick(cirugia)}
                     className="mt-3 w-full py-2 px-4 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-lg transition-colors flex items-center justify-center gap-2"
                   >
                     <XCircle className="w-4 h-4" />
@@ -690,10 +690,11 @@ export default function Calendario() {
           )}
 
           {view === 'day' && selectedDay && (
-            <DayView 
+            <DayView
               day={selectedDay}
               pabellones={pabellones}
               cirugias={cirugias}
+              onCancelarClick={handleCancelarClick}
             />
           )}
         </>
