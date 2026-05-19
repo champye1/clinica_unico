@@ -74,7 +74,7 @@ const localStorageMock = {
 describe('Dashboard Pabellón', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    Object.defineProperty(global, 'localStorage', { value: localStorageMock, writable: true })
+    Object.defineProperty(globalThis, 'localStorage', { value: localStorageMock, writable: true })
   })
 
   it('renderiza sin explotar', async () => {
