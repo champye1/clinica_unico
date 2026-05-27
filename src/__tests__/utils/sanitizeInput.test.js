@@ -39,12 +39,11 @@ describe('sanitizeString', () => {
     expect(sanitizeString("' OR 1=1 -- comment")).not.toContain('--')
   })
 
-  it('escapes HTML special characters', () => {
-    const result = sanitizeString('<b>bold</b> & "test"')
-    expect(result).not.toContain('<b>')
-    expect(result).toContain('&amp;')
-    expect(result).toContain('&lt;')
-    expect(result).toContain('&gt;')
+  it('preserves & < > characters — React escapes them at render time', () => {
+    // sanitizeString is for DB storage; React JSX handles HTML escaping during render.
+    // Encoding here would cause "&amp;" to appear as literal text in the UI.
+    expect(sanitizeString('precio: 10 & 20, mayor > 5')).toBe('precio: 10 & 20, mayor > 5')
+    expect(sanitizeString('nota: A < B')).toBe('nota: A < B')
   })
 
   it('respects maxLength option', () => {
