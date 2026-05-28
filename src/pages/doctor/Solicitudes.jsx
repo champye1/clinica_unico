@@ -58,7 +58,7 @@ export default function Solicitudes() {
         .from('surgery_requests')
         .select(`
           *,
-          patients:patient_id(nombre, apellido, rut),
+          patients:patient_id(nombre, apellido, rut, telefono),
           surgery_request_supplies(
             supply_id,
             cantidad,
@@ -295,12 +295,28 @@ export default function Solicitudes() {
   }
 
   const cancelarSolicitud = useMutation({
-    mutationFn: async (solicitudId) => {
+    mutationFn: async ({ solicitudId, estadoActual }) => {
       const { error } = await supabase
         .from('surgery_requests')
         .update({ estado: 'cancelada', updated_at: new Date().toISOString() })
         .eq('id', solicitudId)
       if (error) throw error
+      // Si estaba aceptada, notificar a los usuarios de pabellón
+      if (estadoActual === 'aceptada') {
+        const { data: pabellonUsers } = await supabase
+          .from('users')
+          .select('id')
+          .eq('role', 'pabellon')
+        for (const u of pabellonUsers || []) {
+          await supabase.from('notifications').insert({
+            user_id: u.id,
+            tipo: 'solicitud_cancelada',
+            titulo: 'Solicitud cancelada por el médico',
+            mensaje: `El médico canceló una solicitud previamente aceptada (ID ${solicitudId.slice(0,8)}).`,
+            relacionado_con: solicitudId,
+          }).catch(() => {})
+        }
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries(['solicitudes-doctor'])
@@ -371,6 +387,9 @@ export default function Solicitudes() {
                       {solicitud.patients?.nombre} {solicitud.patients?.apellido}
                     </h3>
                     <p className={`text-sm ${isDark ? 'text-slate-300' : 'text-gray-600'}`}>RUT: {solicitud.patients?.rut}</p>
+                    {solicitud.patients?.telefono && (
+                      <p className={`text-sm ${isDark ? 'text-slate-300' : 'text-gray-600'}`}>Tel: {solicitud.patients.telefono}</p>
+                    )}
                     <p className={`text-sm mt-1 ${isDark ? 'text-slate-300' : 'text-gray-600'}`}>
                       Código Operación: {solicitud.codigo_operacion}
                     </p>
@@ -428,6 +447,16 @@ export default function Solicitudes() {
                   </div>
                 )}
 
+                {solicitud.estado === 'rechazada' && solicitud.motivo_rechazo && (
+                  <div className="mb-3 flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2.5">
+                    <XCircle className="w-4 h-4 text-red-500 mt-0.5 shrink-0" />
+                    <div>
+                      <p className="text-xs font-semibold text-red-700 mb-0.5">Motivo del rechazo</p>
+                      <p className="text-sm text-red-700">{solicitud.motivo_rechazo}</p>
+                    </div>
+                  </div>
+                )}
+
                 {solicitud.observaciones && (
                   <div className="mb-2">
                     <span className={`text-sm font-medium ${isDark ? 'text-slate-300' : ''}`}>Observaciones: </span>
@@ -476,7 +505,7 @@ export default function Solicitudes() {
                   <div className={`text-xs ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
                     Creada el {format(new Date(solicitud.created_at), 'dd/MM/yyyy HH:mm')}
                   </div>
-                  {solicitud.estado === 'pendiente' && (
+                  {(solicitud.estado === 'pendiente' || solicitud.estado === 'aceptada') && (
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => setSolicitudACancelar(solicitud)}
@@ -486,14 +515,16 @@ export default function Solicitudes() {
                         <Trash2 className="w-4 h-4" />
                         Cancelar
                       </button>
-                      <button
-                        onClick={() => handleEditarClick(solicitud)}
-                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-lg transition-colors flex items-center gap-2"
-                        aria-label="Editar solicitud"
-                      >
-                        <Edit className="w-4 h-4" />
-                        Editar
-                      </button>
+                      {solicitud.estado === 'pendiente' && (
+                        <button
+                          onClick={() => handleEditarClick(solicitud)}
+                          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-lg transition-colors flex items-center gap-2"
+                          aria-label="Editar solicitud"
+                        >
+                          <Edit className="w-4 h-4" />
+                          Editar
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
@@ -527,6 +558,12 @@ export default function Solicitudes() {
               ¿Seguro que quieres cancelar la solicitud de{' '}
               <strong>{solicitudACancelar.patients?.nombre} {solicitudACancelar.patients?.apellido}</strong>?
             </p>
+            {solicitudACancelar.estado === 'aceptada' && (
+              <div className={`flex items-start gap-2 rounded-xl border p-3 text-xs font-medium ${isDark ? 'bg-amber-900/20 border-amber-700 text-amber-300' : 'bg-amber-50 border-amber-200 text-amber-800'}`}>
+                <span className="shrink-0">⚠️</span>
+                <span>El pabellón ya <strong>aceptó</strong> esta solicitud. Al cancelarla, se notificará al equipo y deberás crear una nueva solicitud si cambias de opinión.</span>
+              </div>
+            )}
             <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
               Esta acción no se puede deshacer. La solicitud quedará marcada como cancelada.
             </p>
@@ -537,7 +574,7 @@ export default function Solicitudes() {
               <Button
                 type="button"
                 loading={cancelarSolicitud.isPending}
-                onClick={() => cancelarSolicitud.mutate(solicitudACancelar.id)}
+                onClick={() => cancelarSolicitud.mutate({ solicitudId: solicitudACancelar.id, estadoActual: solicitudACancelar.estado })}
                 className="bg-red-600 hover:bg-red-700"
               >
                 Sí, cancelar

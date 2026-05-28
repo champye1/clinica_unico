@@ -36,3 +36,4 @@ build/
 
 # Supabase local dev artifacts
 supabase/.temp/
+.mcp.json

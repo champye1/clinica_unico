@@ -1,0 +1,29 @@
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "America/Santiago"
+    open-pull-requests-limit: 5
+    groups:
+      dev-dependencies:
+        dependency-type: "development"
+      react-ecosystem:
+        patterns:
+          - "react*"
+          - "@testing-library/*"
+      tanstack:
+        patterns:
+          - "@tanstack/*"
+    ignore:
+      # xlsx has an unresolved 'high' advisory — patch manually when fix available
+      - dependency-name: "xlsx"
+        update-types: ["version-update:semver-patch"]
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"

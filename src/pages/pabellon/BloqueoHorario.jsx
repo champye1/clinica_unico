@@ -129,15 +129,47 @@ export default function BloqueoHorario() {
   const crearBloqueo = useMutation({
     mutationFn: async (data) => {
       const { data: { user } } = await supabase.auth.getUser()
-      
+
       const { error } = await supabase
         .from('schedule_blocks')
-        .insert({
-          ...data,
-          created_by: user.id,
-        })
-      
+        .insert({ ...data, created_by: user.id })
       if (error) throw error
+
+      // Notificar a los doctores con cirugías programadas que se solapan con el bloqueo
+      if (data.fecha && data.hora_inicio && data.hora_fin) {
+        const { data: afectadas } = await supabase
+          .from('surgeries')
+          .select('id, hora_inicio, hora_fin, doctor_id, doctors:doctor_id(user_id, nombre, apellido), patients:patient_id(nombre, apellido)')
+          .eq('operating_room_id', data.operating_room_id)
+          .eq('fecha', data.fecha)
+          .not('estado', 'eq', 'cancelada')
+          .is('deleted_at', null)
+
+        const bloqueoIni = data.hora_inicio
+        const bloqueoFin = data.hora_fin
+        const solapadas = (afectadas || []).filter(c => {
+          const ci = c.hora_inicio?.slice(0, 5)
+          const cf = c.hora_fin?.slice(0, 5)
+          return ci && cf && ci < bloqueoFin && cf > bloqueoIni
+        })
+
+        for (const c of solapadas) {
+          if (c.doctors?.user_id) {
+            await supabase.from('notifications').insert({
+              user_id: c.doctors.user_id,
+              tipo: 'bloqueo_horario',
+              titulo: 'Bloqueo de horario en tu pabellón',
+              mensaje: `Se bloqueó el pabellón el ${data.fecha} de ${bloqueoIni.slice(0,5)} a ${bloqueoFin.slice(0,5)}${data.motivo ? ` (${data.motivo})` : ''}. Tu cirugía de ${c.patients?.nombre || ''} ${c.patients?.apellido || ''} podría verse afectada.`,
+              relacionado_con: c.id,
+            }).catch(() => {})
+          }
+        }
+
+        if (solapadas.length > 0) {
+          showSuccess(`Bloqueo creado. Se notificó a ${solapadas.length} médico${solapadas.length !== 1 ? 's' : ''} con cirugías afectadas.`)
+          return
+        }
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries(['bloqueos'])

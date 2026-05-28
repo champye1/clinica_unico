@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '../../config/supabase'
-import { Search, Download, FileSpreadsheet, User, Database, Clock } from 'lucide-react'
+import { Search, Download, FileSpreadsheet, User, Database, Clock, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { useDebounce } from '../../hooks/useDebounce'
@@ -19,6 +19,8 @@ export default function Auditoria() {
   const [fechaDesde, setFechaDesde] = useState('')
   const [fechaHasta, setFechaHasta] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
+  const [sortField, setSortField] = useState('created_at')
+  const [sortDir, setSortDir] = useState('desc')
   const itemsPerPage = 20
 
   const debouncedBusqueda = useDebounce(busqueda, 300)
@@ -77,12 +79,33 @@ export default function Auditoria() {
     })
   }, [logs, debouncedBusqueda])
 
-  // Paginación
+  // Ordenamiento + paginación
   const totalPages = Math.ceil(logsFiltrados.length / itemsPerPage)
   const logsPaginados = useMemo(() => {
+    const sorted = [...logsFiltrados].sort((a, b) => {
+      const va = a[sortField] ?? ''
+      const vb = b[sortField] ?? ''
+      const cmp = String(va).localeCompare(String(vb), 'es', { sensitivity: 'base' })
+      return sortDir === 'asc' ? cmp : -cmp
+    })
     const startIndex = (currentPage - 1) * itemsPerPage
-    return logsFiltrados.slice(startIndex, startIndex + itemsPerPage)
-  }, [logsFiltrados, currentPage, itemsPerPage])
+    return sorted.slice(startIndex, startIndex + itemsPerPage)
+  }, [logsFiltrados, currentPage, itemsPerPage, sortField, sortDir])
+
+  const handleSort = (field) => {
+    if (sortField === field) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortField(field)
+      setSortDir('asc')
+    }
+    setCurrentPage(1)
+  }
+
+  const SortIcon = ({ field }) => {
+    if (sortField !== field) return <ArrowUpDown className="w-3 h-3 opacity-40" />
+    return sortDir === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />
+  }
 
   // Obtener tablas únicas para filtro
   const tablasUnicas = useMemo(() => {
@@ -96,21 +119,28 @@ export default function Auditoria() {
   }, [logs])
 
   // Funciones de exportación
+  const prepararFilasExport = () => logsFiltrados.map(log => ({
+    ...log,
+    'created_at': format(new Date(log.created_at), 'dd/MM/yyyy HH:mm:ss'),
+    'users.email': log.users?.email || 'Sistema',
+    'registro_id': log.registro_id || '-',
+    'datos_anteriores': log.datos_anteriores ? JSON.stringify(log.datos_anteriores) : '-',
+    'datos_nuevos': log.datos_nuevos ? JSON.stringify(log.datos_nuevos) : '-',
+  }))
+
+  const EXPORT_COLUMNS = [
+    { key: 'created_at', label: 'Fecha y Hora' },
+    { key: 'users.email', label: 'Usuario' },
+    { key: 'accion', label: 'Acción' },
+    { key: 'tabla_afectada', label: 'Tabla' },
+    { key: 'registro_id', label: 'ID Registro' },
+    { key: 'datos_anteriores', label: 'Valores Anteriores' },
+    { key: 'datos_nuevos', label: 'Valores Nuevos' },
+  ]
+
   const handleExportCSV = () => {
     try {
-      const columns = [
-        { key: 'created_at', label: 'Fecha y Hora' },
-        { key: 'users.email', label: 'Usuario' },
-        { key: 'accion', label: 'Acción' },
-        { key: 'tabla_afectada', label: 'Tabla' },
-        { key: 'registro_id', label: 'ID Registro' },
-      ]
-      exportToCSV(logsFiltrados.map(log => ({
-        ...log,
-        'created_at': format(new Date(log.created_at), 'dd/MM/yyyy HH:mm:ss'),
-        'users.email': log.users?.email || 'Sistema',
-        'registro_id': log.registro_id || '-',
-      })), columns, 'auditoria')
+      exportToCSV(prepararFilasExport(), EXPORT_COLUMNS, 'auditoria')
     } catch (error) {
       logger.errorWithContext('Error al exportar CSV', error)
     }
@@ -118,21 +148,9 @@ export default function Auditoria() {
 
   const handleExportExcel = async () => {
     try {
-      const columns = [
-        { key: 'created_at', label: 'Fecha y Hora' },
-        { key: 'users.email', label: 'Usuario' },
-        { key: 'accion', label: 'Acción' },
-        { key: 'tabla_afectada', label: 'Tabla' },
-        { key: 'registro_id', label: 'ID Registro' },
-      ]
-      await exportToExcel(logsFiltrados.map(log => ({
-        ...log,
-        'created_at': format(new Date(log.created_at), 'dd/MM/yyyy HH:mm:ss'),
-        'users.email': log.users?.email || 'Sistema',
-        'registro_id': log.registro_id || '-',
-      })), columns, 'auditoria')
+      await exportToExcel(prepararFilasExport(), EXPORT_COLUMNS, 'auditoria')
     } catch (error) {
-      logger.errorWithContext('Error al exportar CSV', error)
+      logger.errorWithContext('Error al exportar Excel', error)
     }
   }
 
@@ -276,11 +294,26 @@ export default function Auditoria() {
               <table className="w-full">
                 <thead>
                   <tr className={`border-b ${theme === 'dark' ? 'border-slate-700' : 'border-slate-200'}`}>
-                    <th className={`text-left py-3 px-4 font-medium ${theme === 'dark' ? 'text-slate-200' : 'text-gray-700'}`}>Fecha y Hora</th>
-                    <th className={`text-left py-3 px-4 font-medium ${theme === 'dark' ? 'text-slate-200' : 'text-gray-700'}`}>Usuario</th>
-                    <th className={`text-left py-3 px-4 font-medium ${theme === 'dark' ? 'text-slate-200' : 'text-gray-700'}`}>Acción</th>
-                    <th className={`text-left py-3 px-4 font-medium ${theme === 'dark' ? 'text-slate-200' : 'text-gray-700'}`}>Tabla</th>
-                    <th className={`text-left py-3 px-4 font-medium ${theme === 'dark' ? 'text-slate-200' : 'text-gray-700'}`}>ID Registro</th>
+                    {[
+                      { field: 'created_at', label: 'Fecha y Hora', sortable: true },
+                      { field: null, label: 'Usuario', sortable: false },
+                      { field: 'accion', label: 'Acción', sortable: true },
+                      { field: 'tabla_afectada', label: 'Tabla', sortable: true },
+                      { field: null, label: 'ID Registro', sortable: false },
+                    ].map(({ field, label, sortable }) => (
+                      <th key={label} className={`text-left py-3 px-4 font-medium ${theme === 'dark' ? 'text-slate-200' : 'text-gray-700'}`}>
+                        {sortable ? (
+                          <button
+                            onClick={() => handleSort(field)}
+                            className="inline-flex items-center gap-1 hover:text-blue-600 transition-colors"
+                            aria-label={`Ordenar por ${label}`}
+                          >
+                            {label}
+                            <SortIcon field={field} />
+                          </button>
+                        ) : label}
+                      </th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>

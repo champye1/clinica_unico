@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../../config/supabase'
-import { Plus, Edit, Trash2, CheckCircle2, XCircle, Globe, Key, Eye, EyeOff, Search, Download, FileSpreadsheet, Palmtree, UserCheck } from 'lucide-react'
+import { Plus, Edit, Trash2, CheckCircle2, XCircle, Globe, Key, Eye, EyeOff, Search, Download, FileSpreadsheet, Palmtree, UserCheck, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
 import { formatRut, cleanRut, validateRut } from '../../utils/rutFormatter'
 import { useNotifications } from '../../hooks/useNotifications'
 import toast from 'react-hot-toast'
@@ -54,6 +54,8 @@ export default function Medicos() {
   const [fieldErrors, setFieldErrors] = useState({})
   const [touchedFields, setTouchedFields] = useState({})
   const [currentPage, setCurrentPage] = useState(1)
+  const [sortField, setSortField] = useState('apellido')
+  const [sortDir, setSortDir] = useState('asc')
   const itemsPerPage = 20
 
   const queryClient = useQueryClient()
@@ -119,11 +121,38 @@ export default function Medicos() {
         .select('*')
         .is('deleted_at', null)
         .order('apellido', { ascending: true })
-      
+
       if (error) throw error
       return data
     },
   })
+
+  const { data: cirugiasEstaSemana = [] } = useQuery({
+    queryKey: ['medicos-cirugias-semana'],
+    queryFn: async () => {
+      const hoy = new Date()
+      const lunes = new Date(hoy)
+      lunes.setDate(hoy.getDate() - ((hoy.getDay() + 6) % 7))
+      const domingo = new Date(lunes)
+      domingo.setDate(lunes.getDate() + 6)
+      const { data } = await supabase
+        .from('surgeries')
+        .select('doctor_id')
+        .gte('fecha', lunes.toISOString().slice(0, 10))
+        .lte('fecha', domingo.toISOString().slice(0, 10))
+        .not('estado', 'eq', 'cancelada')
+        .is('deleted_at', null)
+      return data || []
+    },
+  })
+
+  const cirugiasSemanaPorDoctor = useMemo(() => {
+    const map = {}
+    for (const c of cirugiasEstaSemana) {
+      if (c.doctor_id) map[c.doctor_id] = (map[c.doctor_id] || 0) + 1
+    }
+    return map
+  }, [cirugiasEstaSemana])
 
   // Filtrar médicos según búsqueda y filtros (usando debouncedBusqueda)
   const medicosFiltrados = useMemo(() => {
@@ -156,12 +185,39 @@ export default function Medicos() {
     })
   }, [medicos, debouncedBusqueda, filtroEspecialidad, filtroEstado])
 
-  // Paginación
+  // Ordenamiento + paginación
   const totalPages = Math.ceil(medicosFiltrados.length / itemsPerPage)
   const medicosPaginados = useMemo(() => {
+    const sorted = [...medicosFiltrados].sort((a, b) => {
+      let va, vb
+      if (sortField === 'nombre') {
+        va = `${a.apellido} ${a.nombre}`
+        vb = `${b.apellido} ${b.nombre}`
+      } else {
+        va = a[sortField] ?? ''
+        vb = b[sortField] ?? ''
+      }
+      const cmp = String(va).localeCompare(String(vb), 'es', { sensitivity: 'base' })
+      return sortDir === 'asc' ? cmp : -cmp
+    })
     const startIndex = (currentPage - 1) * itemsPerPage
-    return medicosFiltrados.slice(startIndex, startIndex + itemsPerPage)
-  }, [medicosFiltrados, currentPage, itemsPerPage])
+    return sorted.slice(startIndex, startIndex + itemsPerPage)
+  }, [medicosFiltrados, currentPage, itemsPerPage, sortField, sortDir])
+
+  const handleSort = (field) => {
+    if (sortField === field) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortField(field)
+      setSortDir('asc')
+    }
+    setCurrentPage(1)
+  }
+
+  const SortIcon = ({ field }) => {
+    if (sortField !== field) return <ArrowUpDown className="w-3 h-3 opacity-40" />
+    return sortDir === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />
+  }
 
   // Resetear página cuando cambian los filtros
   useEffect(() => {
@@ -1033,21 +1089,35 @@ export default function Medicos() {
           <table className="w-full">
             <thead>
               <tr className={`border-b ${theme === 'dark' ? 'border-slate-700' : 'border-slate-200'}`}>
-                <th className={`text-left py-3 px-4 font-medium ${theme === 'dark' ? 'text-slate-200' : 'text-gray-700'}`}>Nombre</th>
-                <th className={`text-left py-3 px-4 font-medium ${theme === 'dark' ? 'text-slate-200' : 'text-gray-700'}`}>RUT</th>
-                <th className={`text-left py-3 px-4 font-medium ${theme === 'dark' ? 'text-slate-200' : 'text-gray-700'}`}>Correo</th>
-                <th className={`text-left py-3 px-4 font-medium ${theme === 'dark' ? 'text-slate-200' : 'text-gray-700'}`}>Especialidad</th>
-                <th className={`text-left py-3 px-4 font-medium ${theme === 'dark' ? 'text-slate-200' : 'text-gray-700'}`}>Estado</th>
+                {[
+                  { field: 'nombre', label: 'Nombre' },
+                  { field: 'rut', label: 'RUT' },
+                  { field: 'email', label: 'Correo' },
+                  { field: 'especialidad', label: 'Especialidad' },
+                  { field: 'estado', label: 'Estado' },
+                ].map(({ field, label }) => (
+                  <th key={field} className={`text-left py-3 px-4 font-medium ${theme === 'dark' ? 'text-slate-200' : 'text-gray-700'}`}>
+                    <button
+                      onClick={() => handleSort(field)}
+                      className="inline-flex items-center gap-1 hover:text-blue-600 transition-colors"
+                      aria-label={`Ordenar por ${label}`}
+                    >
+                      {label}
+                      <SortIcon field={field} />
+                    </button>
+                  </th>
+                ))}
+                <th className={`text-left py-3 px-4 font-medium ${theme === 'dark' ? 'text-slate-200' : 'text-gray-700'}`}>Esta sem.</th>
                 <th className={`text-left py-3 px-4 font-medium ${theme === 'dark' ? 'text-slate-200' : 'text-gray-700'}`}>Acceso Web</th>
                 <th className={`text-left py-3 px-4 font-medium ${theme === 'dark' ? 'text-slate-200' : 'text-gray-700'}`}>Acciones</th>
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
-                <TableBodySkeleton rows={6} cols={7} />
+                <TableBodySkeleton rows={6} cols={8} />
               ) : medicosFiltrados.length === 0 ? (
                 <tr>
-                  <td colSpan="7" className={`text-center py-8 ${theme === 'dark' ? 'text-slate-300' : 'text-gray-500'}`}>
+                  <td colSpan="8" className={`text-center py-8 ${theme === 'dark' ? 'text-slate-300' : 'text-gray-500'}`}>
                     {busqueda || filtroEspecialidad || filtroEstado 
                       ? 'No se encontraron médicos con los filtros aplicados'
                       : 'No hay médicos registrados'}
@@ -1075,6 +1145,17 @@ export default function Medicos() {
                       <span className={`px-2 py-1 rounded text-xs ${getEstadoBadge(medico.estado)}`}>
                         {medico.estado}
                       </span>
+                    </td>
+                    <td className="py-3 px-4">
+                      {cirugiasSemanaPorDoctor[medico.id] > 0 ? (
+                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-bold ${
+                          theme === 'dark' ? 'bg-blue-900/40 text-blue-300' : 'bg-blue-100 text-blue-700'
+                        }`}>
+                          {cirugiasSemanaPorDoctor[medico.id]}
+                        </span>
+                      ) : (
+                        <span className={`text-xs ${theme === 'dark' ? 'text-slate-500' : 'text-slate-400'}`}>—</span>
+                      )}
                     </td>
                     <td className="py-3 px-4">
                       {medico.acceso_web_enabled ? (

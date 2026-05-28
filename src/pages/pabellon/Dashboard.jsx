@@ -15,7 +15,11 @@ import {
   BarChart3,
   Timer,
   Trash2,
-  PhoneCall
+  PhoneCall,
+  AlertTriangle,
+  Package,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react'
 import { format, subDays, eachDayOfInterval } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -36,6 +40,7 @@ export default function Dashboard() {
   const [filtroTipoOcupacion, setFiltroTipoOcupacion] = useState('porcentaje') // porcentaje | horas_ocupadas | horas_libres
   const [filtroPabellon, setFiltroPabellon] = useState('todos') // todos | id de pabellón
   const [showCirugiasHoyModal, setShowCirugiasHoyModal] = useState(false)
+  const [expandedCirugiaHoyId, setExpandedCirugiaHoyId] = useState(null)
   // Solicitudes pendientes
   const { data: solicitudesPendientes = [], isLoading: isLoadingSolicitudes } = useQuery({
     queryKey: ['solicitudes-pendientes'],
@@ -108,6 +113,20 @@ export default function Dashboard() {
       if (error) throw error
       return data
     },
+  })
+
+  // Insumos de la cirugía expandida en el modal de hoy
+  const { data: insumosCirugiaHoy = [] } = useQuery({
+    queryKey: ['insumos-cirugia-hoy', expandedCirugiaHoyId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('surgery_supplies')
+        .select('cantidad, supplies:supply_id(nombre, unidad)')
+        .eq('surgery_id', expandedCirugiaHoyId)
+      if (error) throw error
+      return data || []
+    },
+    enabled: !!expandedCirugiaHoyId,
   })
 
   // Cirugías de la última semana para el gráfico
@@ -247,6 +266,23 @@ export default function Dashboard() {
         slotsTotales
       }
     },
+  })
+
+  // Insumos con stock bajo (stock_actual <= stock_minimo)
+  const { data: insumosStockBajo = [] } = useQuery({
+    queryKey: ['insumos-stock-bajo'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('supplies')
+        .select('id, nombre, codigo, stock_actual, stock_minimo, unidad_medida')
+        .eq('activo', true)
+        .is('deleted_at', null)
+        .order('stock_actual', { ascending: true })
+        .limit(50)
+      if (error) return []
+      return (data || []).filter(s => s.stock_actual <= s.stock_minimo)
+    },
+    refetchInterval: 60_000,
   })
 
   // Recordatorios
@@ -508,6 +544,51 @@ export default function Dashboard() {
               Marcar vistas
             </button>
           </div>
+        </div>
+      )}
+
+      {/* Banner: Stock bajo de insumos */}
+      {insumosStockBajo.length > 0 && (
+        <div className={`mb-6 sm:mb-8 rounded-2xl border-2 p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center gap-4 ${
+          theme === 'dark'
+            ? 'bg-red-950/40 border-red-700 text-red-100'
+            : 'bg-red-50 border-red-400 text-red-900'
+        }`}>
+          <div className={`flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center ${
+            theme === 'dark' ? 'bg-red-700/50' : 'bg-red-100'
+          }`}>
+            <AlertTriangle size={20} className={theme === 'dark' ? 'text-red-300' : 'text-red-600'} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-black text-sm sm:text-base uppercase tracking-tight">
+              {insumosStockBajo.length === 1
+                ? '1 insumo con stock bajo'
+                : `${insumosStockBajo.length} insumos con stock bajo`}
+            </p>
+            <p className={`text-xs sm:text-sm font-semibold mt-1 ${
+              theme === 'dark' ? 'text-red-300' : 'text-red-700'
+            }`}>
+              Reabastecer antes de las próximas cirugías
+            </p>
+            <ul className={`mt-2 space-y-0.5 ${theme === 'dark' ? 'text-red-200' : 'text-red-800'}`}>
+              {insumosStockBajo.slice(0, 3).map(insumo => (
+                <li key={insumo.id} className="text-xs font-medium truncate">
+                  • {insumo.nombre} — {insumo.stock_actual}/{insumo.stock_minimo} {insumo.unidad_medida || 'unid.'}
+                </li>
+              ))}
+              {insumosStockBajo.length > 3 && (
+                <li className="text-xs font-bold">
+                  + {insumosStockBajo.length - 3} más...
+                </li>
+              )}
+            </ul>
+          </div>
+          <button
+            onClick={() => navigate('/pabellon/insumos', { state: { filtroStockBajo: true } })}
+            className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white font-black text-xs uppercase rounded-xl transition-colors touch-manipulation w-full sm:w-auto flex-shrink-0"
+          >
+            Ver inventario crítico
+          </button>
         </div>
       )}
 
@@ -922,26 +1003,102 @@ export default function Dashboard() {
               No hay cirugías programadas para el día de hoy.
             </p>
           ) : (
-            cirugiasHoy.map((cirugia) => (
-              <div
-                key={cirugia.id}
-                className="border border-slate-200 rounded-xl p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2"
-              >
-                <div className="min-w-0">
-                  <p className="text-sm font-bold text-slate-900 truncate">
-                    {cirugia.patients?.nombre} {cirugia.patients?.apellido}
-                  </p>
-                  <p className="text-xs font-semibold text-slate-500 mt-0.5">
-                    {cirugia.operating_rooms?.nombre || 'Pabellón'} • {cirugia.hora_inicio}–{cirugia.hora_fin}
-                  </p>
-                  <p className="text-[11px] text-slate-500 mt-0.5">
-                    Estado: <span className="font-semibold">{cirugia.estado}</span>
-                  </p>
+            cirugiasHoy.map((cirugia) => {
+              const isExpanded = expandedCirugiaHoyId === cirugia.id
+              return (
+                <div key={cirugia.id} className="border border-slate-200 rounded-xl overflow-hidden">
+                  <button
+                    onClick={() => setExpandedCirugiaHoyId(isExpanded ? null : cirugia.id)}
+                    className="w-full text-left p-3 sm:p-4 flex items-center justify-between gap-2 hover:bg-slate-50 transition-colors"
+                    aria-expanded={isExpanded}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-bold text-slate-900 truncate">
+                        {cirugia.patients?.nombre} {cirugia.patients?.apellido}
+                      </p>
+                      <p className="text-xs font-semibold text-slate-500 mt-0.5">
+                        {cirugia.operating_rooms?.nombre || 'Pabellón'} • {cirugia.hora_inicio?.slice(0,5)}–{cirugia.hora_fin?.slice(0,5)}
+                      </p>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        Dr. {cirugia.doctors?.nombre} {cirugia.doctors?.apellido} • <span className="font-semibold capitalize">{cirugia.estado}</span>
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <Package size={13} className="text-slate-400" />
+                      {isExpanded ? <ChevronUp size={15} className="text-slate-400" /> : <ChevronDown size={15} className="text-slate-400" />}
+                    </div>
+                  </button>
+
+                  {isExpanded && (
+                    <div className="border-t border-slate-100 bg-slate-50 px-4 py-3">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 flex items-center gap-1">
+                        <Package size={9} /> Kit de insumos
+                      </p>
+                      {insumosCirugiaHoy.length === 0 ? (
+                        <p className="text-xs text-slate-400">Sin insumos asignados.</p>
+                      ) : (
+                        <ul className="space-y-1">
+                          {insumosCirugiaHoy.map((s, i) => (
+                            <li key={i} className="flex items-center justify-between text-xs text-slate-700">
+                              <span className="font-medium">{s.supplies?.nombre || 'Insumo'}</span>
+                              <span className="font-bold text-slate-500">{s.cantidad} {s.supplies?.unidad || 'u.'}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))
+              )
+            })
           )}
         </div>
+        {cirugiasHoy.length > 0 && (
+          <div className="mt-4 pt-4 border-t border-slate-200 flex justify-end">
+            <button
+              onClick={() => {
+                const fecha = format(new Date(), "d 'de' MMMM yyyy", { locale: es })
+                const filas = cirugiasHoy.map(c =>
+                  `<tr>
+                    <td>${c.hora_inicio || '—'}–${c.hora_fin || '—'}</td>
+                    <td>${c.patients?.nombre || ''} ${c.patients?.apellido || ''}</td>
+                    <td>${c.operating_rooms?.nombre || '—'}</td>
+                    <td>Dr. ${c.doctors?.nombre || ''} ${c.doctors?.apellido || ''}</td>
+                    <td>${c.estado}</td>
+                  </tr>`
+                ).join('')
+                const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+                  <title>Programa del día — ${fecha}</title>
+                  <style>
+                    body{font-family:Arial,sans-serif;margin:20mm;color:#000}
+                    h1{font-size:18px;margin-bottom:4px}
+                    p{font-size:12px;color:#555;margin-bottom:16px}
+                    table{width:100%;border-collapse:collapse;font-size:12px}
+                    th{background:#1e40af;color:#fff;padding:8px;text-align:left}
+                    td{padding:7px 8px;border-bottom:1px solid #ddd}
+                    tr:nth-child(even) td{background:#f8fafc}
+                  </style>
+                </head><body>
+                  <h1>Programa quirúrgico del día</h1>
+                  <p>${fecha}</p>
+                  <table>
+                    <thead><tr><th>Horario</th><th>Paciente</th><th>Pabellón</th><th>Médico</th><th>Estado</th></tr></thead>
+                    <tbody>${filas}</tbody>
+                  </table>
+                </body></html>`
+                const win = window.open('', '_blank')
+                if (win) {
+                  win.document.write(html)
+                  win.document.close()
+                  win.print()
+                }
+              }}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs uppercase rounded-xl transition-colors flex items-center gap-2"
+            >
+              <ClipboardList size={14} /> Exportar PDF
+            </button>
+          </div>
+        )}
       </Modal>
     </div>
   )

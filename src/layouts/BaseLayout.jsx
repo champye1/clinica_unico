@@ -5,12 +5,13 @@ import { es } from 'date-fns/locale'
 import { supabase } from '../config/supabase'
 import {
   LogOut, PanelLeftClose, PanelLeftOpen, Settings,
-  Menu, X, Bell, Stethoscope, Sun, Moon, Activity,
+  Menu, X, Bell, Stethoscope, Sun, Moon, Activity, Search,
 } from 'lucide-react'
 import LoadingSpinner from '../components/common/LoadingSpinner'
 import { LayoutErrorBoundary } from '../components/common/ErrorBoundary'
 import OfflineBanner from '../components/common/OfflineBanner'
 import Modal from '../components/common/Modal'
+import CommandPalette from '../components/common/CommandPalette'
 import { useRealtimeNotifications } from '../hooks/useRealtimeNotifications'
 import { useUnreadNotifications } from '../hooks/useUnreadNotifications'
 import { useNotificationsList } from '../hooks/useNotificationsList'
@@ -35,7 +36,13 @@ export default function BaseLayout({ menuItems, portalLabel, badgeCounts = {}, o
   const [showSettingsModal, setShowSettingsModal] = useState(false)
   const [showNotificationsDropdown, setShowNotificationsDropdown] = useState(false)
   const [userId, setUserId] = useState(null)
+  const [showSessionWarning, setShowSessionWarning] = useState(false)
+  const [sessionMinutosRestantes, setSessionMinutosRestantes] = useState(null)
+  const [showSessionExpiredModal, setShowSessionExpiredModal] = useState(false)
+  const hadSessionRef = useRef(false)
+  const [showCommandPalette, setShowCommandPalette] = useState(false)
   const notificationsDropdownRef = useRef(null)
+  const basePrefix = location.pathname.startsWith('/pabellon') ? '/pabellon' : '/doctor'
 
   // Cerrar dropdown al hacer clic fuera
   useEffect(() => {
@@ -52,15 +59,54 @@ export default function BaseLayout({ menuItems, portalLabel, badgeCounts = {}, o
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (user) setUserId(user.id)
     })
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_, session) => {
-      setUserId(session?.user?.id || null)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (session?.user?.id) {
+        hadSessionRef.current = true
+        setUserId(session.user.id)
+        // Avisar si el token de acceso expira pronto (≤5 min)
+        const expiresAt = session.expires_at
+        if (expiresAt) {
+          const segsRestantes = expiresAt - Math.floor(Date.now() / 1000)
+          const mins = Math.floor(segsRestantes / 60)
+          if (segsRestantes > 0 && segsRestantes <= 300) {
+            setSessionMinutosRestantes(mins)
+            setShowSessionWarning(true)
+          } else {
+            setShowSessionWarning(false)
+          }
+        }
+      } else {
+        setUserId(null)
+        // Si el usuario tenía sesión activa y fue desconectado (token expirado o revocado)
+        if (event === 'SIGNED_OUT' && hadSessionRef.current) {
+          hadSessionRef.current = false
+          setShowSessionExpiredModal(true)
+        }
+      }
     })
     return () => subscription.unsubscribe()
+  }, [])
+
+  // Cmd+K / Ctrl+K para abrir command palette
+  useEffect(() => {
+    const handler = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault()
+        setShowCommandPalette(v => !v)
+      }
+    }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
   }, [])
 
   useRealtimeNotifications(userId)
   const { count: unreadCount } = useUnreadNotifications(userId)
   const { notifications, markAsRead, markAllAsRead } = useNotificationsList(userId, { enabled: showNotificationsDropdown })
+
+  useEffect(() => {
+    const base = 'QuirúrgicaPro — Gestión Quirúrgica'
+    document.title = unreadCount > 0 ? `(${unreadCount > 99 ? '99+' : unreadCount}) ${base}` : base
+  }, [unreadCount])
 
   const handleLogout = async () => {
     const { clearAllAppData } = await import('../utils/storageCleaner')
@@ -316,6 +362,18 @@ export default function BaseLayout({ menuItems, portalLabel, badgeCounts = {}, o
               )}
             </div>
 
+            {/* Búsqueda global Cmd+K */}
+            <button
+              onClick={() => setShowCommandPalette(true)}
+              title="Búsqueda global (Ctrl+K)"
+              className={`hidden sm:flex items-center gap-2 h-8 sm:h-10 px-3 ${isDark ? 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700' : isMedical ? 'bg-blue-50 border-blue-200 text-blue-600 hover:bg-blue-100' : 'bg-slate-100 border-slate-200 text-slate-400 hover:text-blue-600 hover:bg-blue-50'} rounded-xl border transition-all text-xs font-bold`}
+              aria-label="Búsqueda global"
+            >
+              <Search className="w-3.5 h-3.5" />
+              <span className="hidden md:inline">Buscar</span>
+              <kbd className="hidden md:inline text-[9px] border border-current rounded px-1 opacity-60">⌘K</kbd>
+            </button>
+
             {/* Configuración */}
             <button
               onClick={() => setShowSettingsModal(true)}
@@ -336,6 +394,69 @@ export default function BaseLayout({ menuItems, portalLabel, badgeCounts = {}, o
           </LayoutErrorBoundary>
         </main>
       </div>
+
+      {/* ── Modal de Tema ── */}
+      <CommandPalette
+        isOpen={showCommandPalette}
+        onClose={() => setShowCommandPalette(false)}
+        basePrefix={basePrefix}
+      />
+
+      {/* ── Aviso de sesión por vencer ── */}
+      <Modal isOpen={showSessionWarning} onClose={() => setShowSessionWarning(false)} title="Sesión por vencer">
+        <div className="space-y-4">
+          <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl p-4">
+            <Bell className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-bold text-amber-800 text-sm">Tu sesión expira pronto</p>
+              <p className="text-sm text-amber-700 mt-1">
+                {sessionMinutosRestantes !== null && sessionMinutosRestantes > 0
+                  ? `Quedan aproximadamente ${sessionMinutosRestantes} minuto${sessionMinutosRestantes !== 1 ? 's' : ''}.`
+                  : 'Tu sesión está a punto de expirar.'} Guarda tu trabajo para no perder cambios.
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-3">
+            <button
+              onClick={async () => {
+                const { error } = await supabase.auth.refreshSession()
+                if (!error) { setShowSessionWarning(false); setSessionMinutosRestantes(null) }
+              }}
+              className="btn-primary flex-1"
+            >
+              Renovar sesión
+            </button>
+            <button onClick={() => setShowSessionWarning(false)} className="btn-secondary flex-1">
+              Cerrar
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* ── Sesión expirada (no se puede descartar) ── */}
+      <Modal isOpen={showSessionExpiredModal} onClose={() => {}} title="Sesión expirada" hideClose>
+        <div className="space-y-4">
+          <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-xl p-4">
+            <Bell className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-bold text-red-800 text-sm">Tu sesión ha expirado</p>
+              <p className="text-sm text-red-700 mt-1">
+                Por seguridad, la sesión fue cerrada automáticamente. Por favor, inicia sesión nuevamente para continuar.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={async () => {
+              const { clearAllAppData } = await import('../utils/storageCleaner')
+              clearAllAppData()
+              window.location.href = '/'
+            }}
+            className="btn-primary w-full"
+          >
+            Ir al inicio de sesión
+          </button>
+        </div>
+      </Modal>
 
       {/* ── Modal de Tema ── */}
       <Modal isOpen={showSettingsModal} onClose={() => setShowSettingsModal(false)} title="Configuración de Tema">

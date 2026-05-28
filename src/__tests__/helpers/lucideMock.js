@@ -5,7 +5,7 @@ export const lucideIcons = {
   // Common
   X: Stub, Plus: Stub, Search: Stub, Info: Stub, Eye: Stub, EyeOff: Stub,
   ChevronDown: Stub, ChevronLeft: Stub, ChevronRight: Stub, ChevronUp: Stub,
-  ArrowLeft: Stub, ArrowRight: Stub, ArrowUp: Stub, ArrowDown: Stub,
+  ArrowLeft: Stub, ArrowRight: Stub, ArrowUp: Stub, ArrowDown: Stub, ArrowUpDown: Stub,
   AlertCircle: Stub, AlertTriangle: Stub, CheckCircle: Stub, CheckCircle2: Stub,
   XCircle: Stub, Lock: Stub, Unlock: Stub, Settings: Stub, Trash2: Stub,
   Edit: Stub, Edit2: Stub, Edit3: Stub, Save: Stub, Download: Stub, Upload: Stub,

@@ -2,7 +2,7 @@ import { useMemo, useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '../../config/supabase'
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Clock, CheckCircle2, Info, Lock, Activity, X, Stethoscope, XCircle, AlertTriangle, Search } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Clock, CheckCircle2, Info, Lock, Activity, X, Stethoscope, XCircle, AlertTriangle, Search, Printer } from 'lucide-react'
 import { useNotifications } from '../../hooks/useNotifications'
 import { sanitizeString } from '../../utils/sanitizeInput'
 import { useTheme } from '../../contexts/ThemeContext'
@@ -45,6 +45,18 @@ const MESES = [
   { indice: 9, nombre: 'OCTUBRE' },
   { indice: 10, nombre: 'NOVIEMBRE' },
   { indice: 11, nombre: 'DICIEMBRE' },
+]
+
+// Paleta de colores para identificar doctores en el calendario (distintos al rojo/verde/amber/azul de estados)
+const DOCTOR_COLORS = [
+  { bg: '#f5f3ff', border: '#7c3aed', dot: '#7c3aed', text: '#5b21b6', label: 'purple' },
+  { bg: '#ecfeff', border: '#0891b2', dot: '#0891b2', text: '#0e7490', label: 'cyan' },
+  { bg: '#fff7ed', border: '#ea580c', dot: '#ea580c', text: '#c2410c', label: 'orange' },
+  { bg: '#fdf2f8', border: '#db2777', dot: '#db2777', text: '#be185d', label: 'pink' },
+  { bg: '#f0fdfa', border: '#0d9488', dot: '#0d9488', text: '#0f766e', label: 'teal' },
+  { bg: '#eef2ff', border: '#4f46e5', dot: '#4f46e5', text: '#4338ca', label: 'indigo' },
+  { bg: '#fefce8', border: '#ca8a04', dot: '#ca8a04', text: '#a16207', label: 'yellow' },
+  { bg: '#fef2f2', border: '#b91c1c', dot: '#b91c1c', text: '#991b1b', label: 'red' },
 ]
 
 // Componente Breadcrumbs mejorado
@@ -362,7 +374,7 @@ const WeekView = ({ weekStart, cirugias, pabellonId, onDayClick, pabellones, sel
 const TIME_SLOTS = Array.from({ length: 12 }, (_, i) => `${(i + 8).toString().padStart(2, '0')}:00`)
 
 // Componente DayView (Slots Horarios)
-const DayView = ({ day, pabellones, cirugias, bloqueos, onSlotSelect, selectedSlot, currentRequest, onConfirmSlot, onSlotClick, showError }) => {
+const DayView = ({ day, pabellones, cirugias, bloqueos, onSlotSelect, selectedSlot, currentRequest, onConfirmSlot, onSlotClick, showError, doctorColorMap = {} }) => {
   const [currentTime, setCurrentTime] = useState(new Date())
   const scrollRef = useRef(null)
   const [gridWidth, setGridWidth] = useState(800) // Ancho inicial de la grilla (más espacio por defecto)
@@ -544,8 +556,8 @@ const DayView = ({ day, pabellones, cirugias, bloqueos, onSlotSelect, selectedSl
               <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">Disponible</span>
             </div>
             <div className="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-50 transition-colors">
-              <div className="w-4 h-4 rounded border-2 border-red-300 bg-red-50 flex items-center justify-center">
-                <XCircle size={12} className="text-red-600" />
+              <div className="w-4 h-4 rounded border-2 border-slate-300 bg-slate-100 flex items-center justify-center">
+                <XCircle size={12} className="text-slate-500" />
               </div>
               <span className="text-xs font-bold text-slate-700 uppercase tracking-wide leading-relaxed">Ocupado</span>
             </div>
@@ -562,6 +574,33 @@ const DayView = ({ day, pabellones, cirugias, bloqueos, onSlotSelect, selectedSl
               <span className="text-xs font-bold text-slate-700 uppercase tracking-wide leading-relaxed">Seleccionado</span>
             </div>
           </div>
+
+          {/* Leyenda de médicos con cirugías hoy */}
+          {(() => {
+            const doctoresHoy = cirugias.reduce((acc, c) => {
+              if (c.doctor_id && !acc.find(d => d.id === c.doctor_id)) {
+                acc.push({ id: c.doctor_id, apellido: c.doctors?.apellido || c.doctors?.nombre || 'Dr.' })
+              }
+              return acc
+            }, [])
+            if (doctoresHoy.length === 0) return null
+            return (
+              <div className="mt-3 pt-3 border-t border-slate-100">
+                <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.3em] mb-2">Médicos hoy</p>
+                <div className="space-y-1.5">
+                  {doctoresHoy.map(doctor => {
+                    const dc = doctorColorMap[doctor.id]?.color
+                    return (
+                      <div key={doctor.id} className="flex items-center gap-2 px-1">
+                        <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: dc?.dot || '#ef4444' }} />
+                        <span className="text-[10px] font-bold text-slate-600 truncate">Dr. {doctor.apellido}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })()}
         </div>
 
         {/* Mensaje informativo si el día es pasado - Más pequeño y debajo de la leyenda */}
@@ -816,24 +855,46 @@ const DayView = ({ day, pabellones, cirugias, bloqueos, onSlotSelect, selectedSl
                           </div>
                         </div>
                       }>
-                        <div className="w-full h-full bg-red-50 border-2 border-red-300 rounded-lg sm:rounded-xl p-2 sm:p-3 flex flex-col items-center justify-center cursor-pointer hover:bg-red-100 hover:border-red-400 hover:shadow-lg active:scale-95 transition-all group/occupied" role="button" tabIndex={0} aria-label="Horario ocupado">
-                          <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-red-500 flex items-center justify-center mb-1 sm:mb-2 group-hover/occupied:scale-110 transition-transform">
-                            <XCircle size={12} className="sm:w-4 sm:h-4 text-white" />
-                          </div>
-                          <span className="text-[10px] sm:text-xs font-black text-red-700 uppercase tracking-wider leading-relaxed text-center">Ocupado</span>
-                          {info.data?.patients?.nombre && (
-                            <span className="text-[8px] sm:text-[9px] text-red-600 font-bold mt-0.5 sm:mt-1 truncate w-full text-center px-1">
-                              {info.data.patients.nombre.split(' ')[0]}
-                            </span>
-                          )}
-                        </div>
+                        {(() => {
+                          const dc = doctorColorMap[info.data?.doctor_id]?.color
+                          return (
+                            <div
+                              className="w-full h-full border-2 rounded-lg sm:rounded-xl p-2 sm:p-3 flex flex-col items-center justify-center cursor-pointer hover:shadow-lg active:scale-95 transition-all group/occupied"
+                              style={{ backgroundColor: dc?.bg || '#fef2f2', borderColor: dc?.border || '#fca5a5' }}
+                              role="button" tabIndex={0} aria-label="Horario ocupado"
+                            >
+                              <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-full flex items-center justify-center mb-1 sm:mb-2 group-hover/occupied:scale-110 transition-transform" style={{ backgroundColor: dc?.dot || '#ef4444' }}>
+                                <XCircle size={12} className="sm:w-4 sm:h-4 text-white" />
+                              </div>
+                              <span className="text-[10px] sm:text-xs font-black uppercase tracking-wider leading-relaxed text-center" style={{ color: dc?.text || '#b91c1c' }}>Ocupado</span>
+                              {info.data?.patients?.nombre && (
+                                <span className="text-[8px] sm:text-[9px] font-bold mt-0.5 sm:mt-1 truncate w-full text-center px-1" style={{ color: dc?.text || '#b91c1c' }}>
+                                  {info.data.patients.nombre.split(' ')[0]}
+                                </span>
+                              )}
+                            </div>
+                          )
+                        })()}
                       </Tooltip>
                     ) : info.status === 'blocked_agreement' ? (
-                      // Renderizado para celda BLOQUEADA - diseño más compacto
-                      <Tooltip content="Bloqueado por convenio - No disponible para agendar">
-                        <div className="w-full h-full bg-slate-800 border-2 border-amber-400/50 rounded-lg sm:rounded-xl p-2 sm:p-3 flex flex-col items-center justify-center cursor-not-allowed hover:border-amber-400 transition-all" role="button" tabIndex={-1} aria-label="Horario bloqueado">
-                          <Lock size={16} className="sm:w-5 sm:h-5 text-amber-400 mb-1 sm:mb-2" />
-                          <span className="text-[10px] sm:text-xs font-black text-amber-400 uppercase tracking-wider leading-relaxed text-center">Bloqueado</span>
+                      // Renderizado para celda BLOQUEADA
+                      <Tooltip content={
+                        info.data?.doctor_id
+                          ? `Bloqueado — ${info.data?.doctors?.nombre || ''} ${info.data?.doctors?.apellido || ''}: ${info.data?.motivo || 'Sin motivo'}`
+                          : `Bloqueado por convenio${info.data?.motivo ? ` — ${info.data.motivo}` : ''}`
+                      }>
+                        <div
+                          className={`w-full h-full border-2 rounded-lg sm:rounded-xl p-2 sm:p-3 flex flex-col items-center justify-center cursor-not-allowed transition-all ${
+                            info.data?.doctor_id
+                              ? 'bg-purple-900 border-purple-400/50 hover:border-purple-400'
+                              : 'bg-slate-800 border-amber-400/50 hover:border-amber-400'
+                          }`}
+                          role="button" tabIndex={-1} aria-label="Horario bloqueado"
+                        >
+                          <Lock size={16} className={`sm:w-5 sm:h-5 mb-1 sm:mb-2 ${info.data?.doctor_id ? 'text-purple-300' : 'text-amber-400'}`} />
+                          <span className={`text-[10px] sm:text-xs font-black uppercase tracking-wider leading-relaxed text-center ${info.data?.doctor_id ? 'text-purple-300' : 'text-amber-400'}`}>
+                            {info.data?.doctor_id ? `Dr. ${info.data?.doctors?.apellido || 'Médico'}` : 'Bloqueado'}
+                          </span>
                         </div>
                       </Tooltip>
                     ) : (
@@ -914,7 +975,8 @@ export default function Calendario() {
   const { showSuccess, showError } = useNotifications()
   const [anio, setAnio] = useState(new Date().getFullYear())
   const [pabellonId, setPabellonId] = useState('todos')
-  const [filtroPaciente, setFiltroPaciente] = useState('') // Filtro por nombre de paciente
+  const [filtroPaciente, setFiltroPaciente] = useState('')
+  const [filtroDoctorId, setFiltroDoctorId] = useState('todos')
   
   // Estados de navegación
   const [view, setView] = useState('year') // year, month, week, day
@@ -931,6 +993,10 @@ export default function Calendario() {
   const [cirugiaACancelar, setCirugiaACancelar] = useState(null)
   // Reagendamiento: cirugía existente a actualizar (cuando el doctor pidió reagendar)
   const [cirugiaAReagendar, setCirugiaAReagendar] = useState(null)
+  const [editandoObservaciones, setEditandoObservaciones] = useState(false)
+  const [observacionesEditadas, setObservacionesEditadas] = useState('')
+  const [conflictoAgenda, setConflictoAgenda] = useState(null) // { cirugias: [] } when overlap found
+  const [ignorarConflicto, setIgnorarConflicto] = useState(false)
   
   // Obtener solicitud desde sessionStorage si existe (programar) o null hasta cargar en modo reagendar
   const [currentRequest, setCurrentRequest] = useState(() => {
@@ -1190,6 +1256,51 @@ export default function Calendario() {
     },
   })
   
+  const imprimirPrograma = () => {
+    if (!selectedDay || cirugiasDetalleFiltered.length === 0) return
+    const fecha = format(selectedDay, "EEEE d 'de' MMMM 'de' yyyy", { locale: es })
+    const rows = cirugiasDetalleFiltered
+      .slice()
+      .sort((a, b) => (a.hora_inicio || '').localeCompare(b.hora_inicio || ''))
+      .map(c => `
+        <tr>
+          <td>${c.hora_inicio?.slice(0,5) || '—'} – ${c.hora_fin?.slice(0,5) || '—'}</td>
+          <td>${c.operating_rooms?.nombre || '—'}</td>
+          <td>${c.patients?.nombre || ''} ${c.patients?.apellido || ''}</td>
+          <td>${c.patients?.rut || '—'}</td>
+          <td>Dr. ${c.doctors?.apellido || ''}, ${c.doctors?.nombre || ''}</td>
+          <td>${c.surgery_requests?.codigo_operacion || '—'}</td>
+          <td style="text-transform:capitalize">${c.estado || '—'}</td>
+        </tr>`)
+      .join('')
+    const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+      <title>Programa Quirúrgico – ${fecha}</title>
+      <style>
+        body { font-family: Arial, sans-serif; font-size: 12px; margin: 24px; color: #1e293b; }
+        h1 { font-size: 18px; margin-bottom: 4px; }
+        p { color: #64748b; margin: 0 0 16px; font-size: 11px; }
+        table { width: 100%; border-collapse: collapse; }
+        th { background: #1e293b; color: #fff; padding: 8px 10px; text-align: left; font-size: 11px; }
+        td { padding: 7px 10px; border-bottom: 1px solid #e2e8f0; vertical-align: top; }
+        tr:nth-child(even) td { background: #f8fafc; }
+        @media print { body { margin: 16px; } }
+      </style></head><body>
+      <h1>Programa Quirúrgico</h1>
+      <p>${fecha.charAt(0).toUpperCase() + fecha.slice(1)} — generado el ${format(new Date(), "dd/MM/yyyy HH:mm")}</p>
+      <table>
+        <thead><tr>
+          <th>Horario</th><th>Pabellón</th><th>Paciente</th><th>RUT</th><th>Médico</th><th>Código op.</th><th>Estado</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </body></html>`
+    const win = window.open('', '_blank')
+    win.document.write(html)
+    win.document.close()
+    win.focus()
+    win.print()
+  }
+
   // Función para manejar la confirmación del slot seleccionado
   const handleConfirmSlot = () => {
     if (selectedSlot && currentRequest) {
@@ -1204,7 +1315,7 @@ export default function Calendario() {
   }
   
   // Función para confirmar y programar la cirugía (o reagendar si estamos en modo reagendar)
-  const handleConfirmarCupo = () => {
+  const handleConfirmarCupo = async () => {
     if (!selectedSlot || !currentRequest || !horaFin) return
     const [horaInicioH, horaInicioM] = selectedSlot.time.split(':').map(Number)
     const [horaFinH, horaFinM] = horaFin.split(':').map(Number)
@@ -1222,6 +1333,37 @@ export default function Calendario() {
       operating_room_id: selectedSlot.pabellonId,
       observaciones: '',
     }
+
+    // Verificar conflicto de agenda del doctor (skip si ya se ignoró)
+    if (!ignorarConflicto && currentRequest.doctor_id) {
+      const { data: cirugiasConflicto } = await supabase
+        .from('surgeries')
+        .select('id, hora_inicio, hora_fin, patients:patient_id(nombre, apellido), operating_rooms:operating_room_id(nombre)')
+        .eq('doctor_id', currentRequest.doctor_id)
+        .eq('fecha', formData.fecha)
+        .not('estado', 'eq', 'cancelada')
+        .is('deleted_at', null)
+
+      if (cirugiasConflicto?.length) {
+        const solapan = cirugiasConflicto.filter(c => {
+          // Exclude the surgery being rescheduled
+          if (cirugiaAReagendar && c.id === cirugiaAReagendar.id) return false
+          const cIni = c.hora_inicio?.slice(0,5).split(':').map(Number)
+          const cFin = c.hora_fin?.slice(0,5).split(':').map(Number)
+          if (!cIni || !cFin) return false
+          const cIniMin = cIni[0] * 60 + cIni[1]
+          const cFinMin = cFin[0] * 60 + cFin[1]
+          return minutosInicio < cFinMin && minutosFin > cIniMin
+        })
+        if (solapan.length > 0) {
+          setConflictoAgenda({ cirugias: solapan })
+          return
+        }
+      }
+    }
+
+    setConflictoAgenda(null)
+    setIgnorarConflicto(false)
 
     if (cirugiaAReagendar) {
       reagendarCirugia.mutate({ cirugiaId: cirugiaAReagendar.id, formData })
@@ -1303,6 +1445,81 @@ export default function Calendario() {
     }
   }
 
+  const marcarEnProceso = useMutation({
+    mutationFn: async (cirugiaId) => {
+      const { data: cirugia } = await supabase
+        .from('surgeries')
+        .select('doctor_id, fecha, hora_inicio, patients:patient_id(nombre, apellido)')
+        .eq('id', cirugiaId)
+        .single()
+
+      const { error } = await supabase
+        .from('surgeries')
+        .update({ estado: 'en_proceso', updated_at: new Date().toISOString() })
+        .eq('id', cirugiaId)
+      if (error) throw error
+
+      if (cirugia?.doctor_id) {
+        const { data: doctorUser } = await supabase
+          .from('doctors').select('user_id').eq('id', cirugia.doctor_id).single()
+        if (doctorUser?.user_id) {
+          await supabase.from('notifications').insert({
+            user_id: doctorUser.user_id,
+            tipo: 'operacion_programada',
+            titulo: 'Cirugía en proceso',
+            mensaje: `La cirugía de ${cirugia.patients?.nombre || ''} ${cirugia.patients?.apellido || ''} del ${format(new Date(cirugia.fecha), 'dd/MM/yyyy')} a las ${cirugia.hora_inicio?.slice(0,5)} ha comenzado.`,
+            relacionado_con: cirugiaId,
+          })
+        }
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries(['cirugias-dia-detalle'])
+      queryClient.invalidateQueries(['cirugias-hoy'])
+      queryClient.invalidateQueries(['calendario-anual-cirugias'])
+      showSuccess('Cirugía marcada como en proceso.')
+      setShowDetallesModal(false)
+      setSlotDetalle(null)
+    },
+    onError: (e) => showError('Error al actualizar estado: ' + (e.message || e)),
+  })
+
+  const completarCirugia = useMutation({
+    mutationFn: async (cirugiaId) => {
+      const { error } = await supabase
+        .from('surgeries')
+        .update({ estado: 'completada', updated_at: new Date().toISOString() })
+        .eq('id', cirugiaId)
+      if (error) throw error
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries(['cirugias-dia-detalle'])
+      queryClient.invalidateQueries(['cirugias-hoy'])
+      queryClient.invalidateQueries(['calendario-anual-cirugias'])
+      showSuccess('Cirugía marcada como completada.')
+      setShowDetallesModal(false)
+      setSlotDetalle(null)
+    },
+    onError: (e) => showError('Error al completar cirugía: ' + (e.message || e)),
+  })
+
+  const editarObservaciones = useMutation({
+    mutationFn: async ({ cirugiaId, observaciones }) => {
+      const { error } = await supabase
+        .from('surgeries')
+        .update({ observaciones, updated_at: new Date().toISOString() })
+        .eq('id', cirugiaId)
+      if (error) throw error
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries(['cirugias-dia-detalle'])
+      showSuccess('Observaciones actualizadas.')
+      setEditandoObservaciones(false)
+      setSlotDetalle(prev => prev ? { ...prev, data: { ...prev.data, observaciones: observacionesEditadas } } : prev)
+    },
+    onError: (e) => showError('Error al guardar: ' + (e.message || e)),
+  })
+
   const inicioAnio = startOfYear(new Date(anio, 0, 1))
   const finAnio = endOfYear(new Date(anio, 0, 1))
 
@@ -1322,6 +1539,7 @@ export default function Calendario() {
           hora_fin,
           estado,
           doctors (
+            id,
             apellido
           ),
           patients:patient_id (
@@ -1383,6 +1601,31 @@ export default function Calendario() {
     },
   })
 
+  const { data: solicitudesPendientes = [] } = useQuery({
+    queryKey: ['solicitudes-pendientes-calendario', anio],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('surgery_requests')
+        .select('id, fecha_preferida, created_at')
+        .eq('estado', 'pendiente')
+        .is('deleted_at', null)
+      return data || []
+    },
+  })
+
+  // Mapa: mes (0-11) → cantidad de solicitudes pendientes
+  const pendientesPorMes = useMemo(() => {
+    const map = {}
+    for (const s of solicitudesPendientes) {
+      const fecha = s.fecha_preferida ? new Date(s.fecha_preferida + 'T12:00:00') : new Date(s.created_at)
+      if (fecha.getFullYear() === anio) {
+        const m = fecha.getMonth()
+        map[m] = (map[m] || 0) + 1
+      }
+    }
+    return map
+  }, [solicitudesPendientes, anio])
+
   // Query para obtener cirugías del día seleccionado con detalles completos
   const { data: cirugiasDetalle = [] } = useQuery({
     queryKey: ['cirugias-dia-detalle', selectedDay, filtroPaciente],
@@ -1413,11 +1656,12 @@ export default function Calendario() {
           const nombre = cirugia.patients?.nombre?.toLowerCase() || ''
           const apellido = cirugia.patients?.apellido?.toLowerCase() || ''
           const nombreCompleto = `${nombre} ${apellido}`.trim()
-          return nombreCompleto.includes(filtroLower) || 
-                 nombre.includes(filtroLower) || 
+          return nombreCompleto.includes(filtroLower) ||
+                 nombre.includes(filtroLower) ||
                  apellido.includes(filtroLower)
         })
       }
+      // filtroDoctorId se aplica en el useMemo cirugiasDetalleFiltered
       
       return data || []
     },
@@ -1478,7 +1722,54 @@ export default function Calendario() {
     })
   }, [anio, pabellonId, cirugias, bloqueos])
 
+  // Mapa de colores por doctor_id, derivado de todas las cirugías del año
+  const doctorColorMap = useMemo(() => {
+    const map = {}
+    let colorIdx = 0
+    for (const c of cirugias) {
+      if (c.doctor_id && !map[c.doctor_id]) {
+        map[c.doctor_id] = {
+          color: DOCTOR_COLORS[colorIdx % DOCTOR_COLORS.length],
+          apellido: c.doctors?.apellido || c.doctors?.nombre || 'Dr.',
+        }
+        colorIdx++
+      }
+    }
+    return map
+  }, [cirugias])
+
+  // Doctors appearing in the selected day — for the doctor filter dropdown
+  const doctoresEnDia = useMemo(() => {
+    const map = {}
+    for (const c of cirugiasDetalle) {
+      if (c.doctor_id && !map[c.doctor_id]) {
+        map[c.doctor_id] = `Dr. ${c.doctors?.nombre || ''} ${c.doctors?.apellido || ''}`.trim()
+      }
+    }
+    return Object.entries(map).map(([id, nombre]) => ({ id, nombre }))
+  }, [cirugiasDetalle])
+
+  // cirugiasDetalle filtered by doctor
+  const cirugiasDetalleFiltered = useMemo(() => {
+    if (filtroDoctorId === 'todos') return cirugiasDetalle
+    return cirugiasDetalle.filter(c => c.doctor_id === filtroDoctorId)
+  }, [cirugiasDetalle, filtroDoctorId])
+
   const cargando = loadingCirugias || loadingBloqueos
+
+  const { data: historialCirugia = [] } = useQuery({
+    queryKey: ['historial-cirugia', slotDetalle?.data?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('surgery_schedule_history')
+        .select('fecha_anterior, hora_inicio_anterior, fecha_nueva, hora_inicio_nueva, motivo, created_at')
+        .eq('surgery_id', slotDetalle.data.id)
+        .order('created_at', { ascending: false })
+      if (error) throw error
+      return data || []
+    },
+    enabled: !!slotDetalle?.data?.id && showDetallesModal,
+  })
 
   const handleNavigate = (targetView, newAnio = null, newMonth = null) => {
     if (targetView === 'year') {
@@ -1673,6 +1964,12 @@ export default function Calendario() {
                     <span className="w-2.5 h-2.5 md:w-3 md:h-3 rounded-full bg-slate-300 flex-shrink-0" />
                     <span className="whitespace-nowrap">Libre</span>
                   </div>
+                  {Object.keys(pendientesPorMes).length > 0 && (
+                    <div className="flex items-center gap-1.5 md:gap-2">
+                      <span className="w-2.5 h-2.5 md:w-3 md:h-3 rounded-full bg-amber-500 flex-shrink-0" />
+                      <span className="whitespace-nowrap">Pendientes</span>
+                    </div>
+                  )}
                 </div>
               </div>
               {/* Grilla 3x4 para los 12 meses - Diseño compacto para ver todos en una pantalla */}
@@ -1695,11 +1992,18 @@ export default function Calendario() {
                   >
                     <div className="flex items-start justify-between mb-2 md:mb-2.5 w-full gap-1.5 md:gap-2">
                       <div className="flex-1 min-w-0">
-                        <h2 className={`text-base md:text-lg lg:text-xl font-black transition-colors uppercase truncate leading-normal tracking-wide ${
-                          theme === 'dark'
-                            ? 'text-white group-hover:text-blue-400'
-                            : 'text-slate-900 group-hover:text-blue-600'
-                        }`}>{mes.nombre}</h2>
+                        <div className="flex items-center gap-1.5">
+                          <h2 className={`text-base md:text-lg lg:text-xl font-black transition-colors uppercase truncate leading-normal tracking-wide ${
+                            theme === 'dark'
+                              ? 'text-white group-hover:text-blue-400'
+                              : 'text-slate-900 group-hover:text-blue-600'
+                          }`}>{mes.nombre}</h2>
+                          {pendientesPorMes[mes.indice] > 0 && (
+                            <span className="shrink-0 bg-amber-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full leading-none" title={`${pendientesPorMes[mes.indice]} solicitudes pendientes`}>
+                              {pendientesPorMes[mes.indice]}
+                            </span>
+                          )}
+                        </div>
                         <p className={`text-[8px] md:text-[9px] lg:text-[10px] font-bold mt-1 leading-relaxed ${
                           theme === 'dark' ? 'text-slate-300' : 'text-slate-500'
                         }`}>
@@ -1785,10 +2089,47 @@ export default function Calendario() {
           )}
 
           {view === 'day' && selectedDay && (
-            <DayView 
+            <>
+              {/* Barra de herramientas: filtro por doctor + imprimir */}
+              <div className="flex items-center gap-2 mb-4 flex-wrap">
+                {doctoresEnDia.length > 1 && (
+                  <>
+                    <Stethoscope size={14} className="text-slate-400 shrink-0" />
+                    <select
+                      value={filtroDoctorId}
+                      onChange={e => setFiltroDoctorId(e.target.value)}
+                      className="text-xs font-bold border border-slate-200 rounded-xl px-3 py-2 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                      aria-label="Filtrar por doctor"
+                    >
+                      <option value="todos">Todos los médicos</option>
+                      {doctoresEnDia.map(d => (
+                        <option key={d.id} value={d.id}>{d.nombre}</option>
+                      ))}
+                    </select>
+                    {filtroDoctorId !== 'todos' && (
+                      <button
+                        onClick={() => setFiltroDoctorId('todos')}
+                        className="text-xs text-blue-600 font-bold hover:underline"
+                      >
+                        Limpiar
+                      </button>
+                    )}
+                  </>
+                )}
+                <button
+                  onClick={imprimirPrograma}
+                  disabled={cirugiasDetalleFiltered.length === 0}
+                  className="ml-auto flex items-center gap-1.5 text-xs font-bold px-3 py-2 border border-slate-200 rounded-xl bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  title="Imprimir programa quirúrgico del día"
+                >
+                  <Printer size={13} />
+                  Imprimir programa
+                </button>
+              </div>
+              <DayView
               day={selectedDay}
               pabellones={pabellones}
-              cirugias={cirugiasDetalle}
+              cirugias={cirugiasDetalleFiltered}
               bloqueos={bloqueos}
               onSlotSelect={setSelectedSlot}
               selectedSlot={selectedSlot}
@@ -1799,7 +2140,9 @@ export default function Calendario() {
                 setShowDetallesModal(true)
               }}
               showError={showError}
+              doctorColorMap={doctorColorMap}
             />
+            </>
           )}
         </>
       )}
@@ -1940,11 +2283,43 @@ export default function Calendario() {
               })()}
             </div>
 
+            {/* Advertencia de conflicto de agenda */}
+            {conflictoAgenda && (
+              <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 space-y-2">
+                <div className="flex items-center gap-2 text-amber-700 font-black text-xs uppercase tracking-wide">
+                  <AlertTriangle size={14} />
+                  Conflicto de agenda — el médico ya tiene {conflictoAgenda.cirugias.length === 1 ? 'una cirugía' : `${conflictoAgenda.cirugias.length} cirugías`} en ese horario
+                </div>
+                <ul className="space-y-1">
+                  {conflictoAgenda.cirugias.map(c => (
+                    <li key={c.id} className="text-xs text-amber-800 font-medium">
+                      {c.hora_inicio?.slice(0,5)}–{c.hora_fin?.slice(0,5)} · {c.patients?.nombre} {c.patients?.apellido} · {c.operating_rooms?.nombre}
+                    </li>
+                  ))}
+                </ul>
+                <p className="text-xs text-amber-600 font-medium">¿Deseas igualmente confirmar el agendamiento?</p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setConflictoAgenda(null)}
+                    className="text-xs font-bold px-3 py-1.5 rounded-lg bg-white border border-amber-300 text-amber-700 hover:bg-amber-50 transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={() => { setIgnorarConflicto(true); setConflictoAgenda(null); handleConfirmarCupo() }}
+                    className="text-xs font-bold px-3 py-1.5 rounded-lg bg-amber-600 text-white hover:bg-amber-700 transition-colors"
+                  >
+                    Sí, confirmar igual
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Botones de acción - Responsive */}
             <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 pt-3 sm:pt-4 border-t border-slate-200">
               <Button
                 variant="secondary"
-                onClick={() => setShowConfirmModal(false)}
+                onClick={() => { setShowConfirmModal(false); setConflictoAgenda(null); setIgnorarConflicto(false) }}
                 className="flex-1 w-full sm:w-auto touch-manipulation"
                 disabled={programarCirugia.isPending || reagendarCirugia.isPending}
               >
@@ -1953,7 +2328,7 @@ export default function Calendario() {
               <Button
                 loading={programarCirugia.isPending || reagendarCirugia.isPending}
                 onClick={handleConfirmarCupo}
-                disabled={!horaFin || programarCirugia.isPending || reagendarCirugia.isPending}
+                disabled={!horaFin || !!conflictoAgenda || programarCirugia.isPending || reagendarCirugia.isPending}
                 className="flex-1 w-full sm:w-auto bg-green-600 hover:bg-green-700 text-white touch-manipulation"
               >
                 {cirugiaAReagendar ? 'Confirmar Reagendamiento' : 'Confirmar Agendamiento'}
@@ -1969,6 +2344,7 @@ export default function Calendario() {
         onClose={() => {
           setShowDetallesModal(false)
           setSlotDetalle(null)
+          setEditandoObservaciones(false)
         }}
         title={slotDetalle?.type === 'occupied' ? 'Detalles de Cirugía' : 'Detalles del Horario'}
       >
@@ -2066,17 +2442,50 @@ export default function Calendario() {
                   </div>
                 </div>
 
-                {/* Observaciones si existen */}
-                {slotDetalle.data.observaciones && (
-                  <div className="p-3 sm:p-4 md:p-5 bg-slate-50 rounded-xl sm:rounded-2xl border border-slate-100">
-                    <div className="text-[8px] sm:text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 sm:mb-2">
-                      Observaciones
-                    </div>
-                    <div className="text-xs sm:text-sm text-slate-700 break-words">
-                      {slotDetalle.data.observaciones}
-                    </div>
+                {/* Observaciones — siempre visible con opción de editar */}
+                <div className="p-3 sm:p-4 md:p-5 bg-slate-50 rounded-xl sm:rounded-2xl border border-slate-100">
+                  <div className="flex items-center justify-between mb-1.5 sm:mb-2">
+                    <span className="text-[8px] sm:text-[9px] font-black text-slate-400 uppercase tracking-widest">Observaciones</span>
+                    {!editandoObservaciones && (
+                      <button
+                        onClick={() => { setEditandoObservaciones(true); setObservacionesEditadas(slotDetalle.data.observaciones || '') }}
+                        className="text-[10px] font-bold text-blue-600 hover:underline"
+                      >
+                        Editar
+                      </button>
+                    )}
                   </div>
-                )}
+                  {editandoObservaciones ? (
+                    <div className="space-y-2">
+                      <textarea
+                        value={observacionesEditadas}
+                        onChange={e => setObservacionesEditadas(e.target.value)}
+                        rows={3}
+                        className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none resize-none"
+                        placeholder="Agregar observaciones…"
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => editarObservaciones.mutate({ cirugiaId: slotDetalle.data.id, observaciones: observacionesEditadas })}
+                          disabled={editarObservaciones.isPending}
+                          className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg transition-colors disabled:opacity-60"
+                        >
+                          {editarObservaciones.isPending ? 'Guardando…' : 'Guardar'}
+                        </button>
+                        <button
+                          onClick={() => setEditandoObservaciones(false)}
+                          className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg transition-colors"
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-xs sm:text-sm text-slate-700 break-words">
+                      {slotDetalle.data.observaciones || <span className="text-slate-400 italic">Sin observaciones</span>}
+                    </div>
+                  )}
+                </div>
 
                 {/* Estado */}
                 <div className="p-3 sm:p-4 md:p-5 bg-white rounded-xl sm:rounded-2xl border border-slate-100">
@@ -2094,21 +2503,65 @@ export default function Calendario() {
                   </div>
                 </div>
 
-                {/* Botón Cancelar si está programada y no es día pasado */}
-                {slotDetalle.data.estado === 'programada' && slotDetalle.date && !isPast(startOfDay(slotDetalle.date)) && (
+                {/* Acciones de estado — sólo si es hoy o futuro */}
+                {slotDetalle.data.estado !== 'cancelada' && slotDetalle.date && !isPast(startOfDay(slotDetalle.date)) && (
+                  <div className="p-3 sm:p-4 md:p-5 bg-white rounded-xl sm:rounded-2xl border border-slate-100 space-y-2">
+                    {slotDetalle.data.estado === 'programada' && (
+                      <button
+                        onClick={() => marcarEnProceso.mutate(slotDetalle.data.id)}
+                        disabled={marcarEnProceso.isPending}
+                        className="w-full py-2.5 sm:py-3 px-3 sm:px-4 bg-amber-500 hover:bg-amber-600 disabled:opacity-60 text-white text-xs sm:text-sm font-bold rounded-lg sm:rounded-xl transition-colors flex items-center justify-center gap-2 touch-manipulation"
+                      >
+                        <Activity size={16} />
+                        {marcarEnProceso.isPending ? 'Actualizando…' : 'Iniciar Cirugía'}
+                      </button>
+                    )}
+                    {slotDetalle.data.estado === 'en_proceso' && (
+                      <button
+                        onClick={() => completarCirugia.mutate(slotDetalle.data.id)}
+                        disabled={completarCirugia.isPending}
+                        className="w-full py-2.5 sm:py-3 px-3 sm:px-4 bg-green-600 hover:bg-green-700 disabled:opacity-60 text-white text-xs sm:text-sm font-bold rounded-lg sm:rounded-xl transition-colors flex items-center justify-center gap-2 touch-manipulation"
+                      >
+                        <CheckCircle2 size={16} />
+                        {completarCirugia.isPending ? 'Actualizando…' : 'Completar Cirugía'}
+                      </button>
+                    )}
+                    {(slotDetalle.data.estado === 'programada' || slotDetalle.data.estado === 'en_proceso') && (
+                      <button
+                        onClick={() => {
+                          setSlotDetalle({ ...slotDetalle, action: 'cancel' })
+                          setShowDetallesModal(false)
+                          setShowConfirmCancelar(true)
+                          setCirugiaACancelar(slotDetalle.data)
+                        }}
+                        className="w-full py-2 sm:py-2.5 px-3 sm:px-4 bg-red-50 hover:bg-red-100 text-red-700 text-xs sm:text-sm font-bold rounded-lg sm:rounded-xl border border-red-200 transition-colors flex items-center justify-center gap-2 touch-manipulation"
+                      >
+                        <XCircle size={16} />
+                        Cancelar Cirugía
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {/* Historial de reagendamientos */}
+                {historialCirugia.length > 0 && (
                   <div className="p-3 sm:p-4 md:p-5 bg-white rounded-xl sm:rounded-2xl border border-slate-100">
-                    <button
-                      onClick={() => {
-                        setSlotDetalle({ ...slotDetalle, action: 'cancel' })
-                        setShowDetallesModal(false)
-                        setShowConfirmCancelar(true)
-                        setCirugiaACancelar(slotDetalle.data)
-                      }}
-                      className="w-full py-2.5 sm:py-3 px-3 sm:px-4 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white text-xs sm:text-sm font-bold rounded-lg sm:rounded-xl transition-colors flex items-center justify-center gap-2 touch-manipulation"
-                    >
-                      <XCircle size={16} className="sm:w-[18px] sm:h-[18px]" />
-                      Cancelar Cirugía
-                    </button>
+                    <div className="text-[8px] sm:text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-1">
+                      <Clock size={9} /> Historial de cambios de fecha
+                    </div>
+                    <ul className="space-y-2">
+                      {historialCirugia.map((h, i) => (
+                        <li key={i} className="text-[10px] sm:text-xs text-slate-600 flex items-start gap-2">
+                          <span className="shrink-0 font-bold text-slate-400">{i + 1}.</span>
+                          <span>
+                            <span className="line-through text-slate-400">{h.fecha_anterior} {h.hora_inicio_anterior}</span>
+                            {' → '}
+                            <span className="font-semibold text-slate-700">{h.fecha_nueva} {h.hora_inicio_nueva}</span>
+                            {h.motivo && <span className="text-slate-400"> — {h.motivo}</span>}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
                   </div>
                 )}
                 

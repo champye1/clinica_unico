@@ -1,8 +1,8 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate, useBlocker } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../../config/supabase'
-import { UserPlus, Package, AlertCircle, Ban, Calendar, LayoutGrid } from 'lucide-react'
+import { UserPlus, Package, AlertCircle, Ban, Calendar, LayoutGrid, ChevronDown, ChevronUp, History } from 'lucide-react'
 import { formatRut, cleanRut, validateRut, isValidRutFormat } from '../../utils/rutFormatter'
 import { sanitizeString, sanitizeRut, sanitizeNumber } from '../../utils/sanitizeInput'
 import SearchableSelect from '../../components/SearchableSelect'
@@ -43,14 +43,36 @@ export default function CrearPaciente() {
   const [insumoSeleccionado, setInsumoSeleccionado] = useState('')
   const [cantidadInsumo, setCantidadInsumo] = useState(1)
   const [rutError, setRutError] = useState('')
+  const [pacienteEncontrado, setPacienteEncontrado] = useState(null)
+  const [buscandoPaciente, setBuscandoPaciente] = useState(false)
   const [showConfirmSinInsumos, setShowConfirmSinInsumos] = useState(false)
   const [showCalendarioGrid, setShowCalendarioGrid] = useState(true)
+  const [historialPaciente, setHistorialPaciente] = useState([])
+  const [showHistorial, setShowHistorial] = useState(false)
+  const [solicitudDuplicadaAlert, setSolicitudDuplicadaAlert] = useState(false)
 
   const queryClient = useQueryClient()
   const { showError, showSuccess } = useNotifications()
   const { theme } = useTheme()
   const location = useLocation()
   const navigate = useNavigate()
+
+  const isDirty = !!(
+    formData.nombre.trim() || formData.apellido.trim() || formData.rut.trim() ||
+    formData.codigo_operacion || formData.insumos.length > 0
+  )
+
+  const blocker = useBlocker(
+    ({ currentLocation, nextLocation }) =>
+      isDirty && !crearPacienteYSolicitud?.isSuccess && currentLocation.pathname !== nextLocation.pathname
+  )
+
+  useEffect(() => {
+    if (!isDirty) return
+    const handler = (e) => { e.preventDefault(); e.returnValue = '' }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [isDirty])
 
   // Prellenar horarios preferidos si viene desde "Horarios pabellones" (uno o dos bloques)
   useEffect(() => {
@@ -197,6 +219,54 @@ export default function CrearPaciente() {
       setInsumoSeleccionado('')
     }
   }, [insumosDisponibles, insumoSeleccionado])
+
+  const buscarPacientePorRut = async (rut) => {
+    if (!doctor || !validateRut(rut) || !isValidRutFormat(rut)) return
+    setBuscandoPaciente(true)
+    setHistorialPaciente([])
+    setSolicitudDuplicadaAlert(false)
+    setShowHistorial(false)
+    try {
+      const { data } = await supabase
+        .from('patients')
+        .select('id, nombre, apellido, telefono')
+        .eq('doctor_id', doctor.id)
+        .eq('rut', cleanRut(rut))
+        .is('deleted_at', null)
+        .maybeSingle()
+      if (data) {
+        setPacienteEncontrado(data)
+        setFormData(prev => ({
+          ...prev,
+          nombre: data.nombre,
+          apellido: data.apellido,
+          telefono: data.telefono || prev.telefono,
+        }))
+        // Obtener historial y detectar duplicados en paralelo
+        const [histRes] = await Promise.all([
+          supabase
+            .from('surgery_requests')
+            .select('id, estado, created_at, codigo_operacion')
+            .eq('patient_id', data.id)
+            .is('deleted_at', null)
+            .order('created_at', { ascending: false })
+            .limit(10),
+        ])
+        const historial = histRes.data || []
+        setHistorialPaciente(historial)
+        const tienePendiente = historial.some(s => s.estado === 'pendiente')
+        setSolicitudDuplicadaAlert(tienePendiente)
+      } else {
+        setPacienteEncontrado(null)
+        setHistorialPaciente([])
+        setSolicitudDuplicadaAlert(false)
+      }
+    } catch {
+      setPacienteEncontrado(null)
+    } finally {
+      setBuscandoPaciente(false)
+    }
+  }
 
   const crearPacienteYSolicitud = useMutation({
     mutationFn: async (data) => {
@@ -534,9 +604,53 @@ export default function CrearPaciente() {
   const puedeCrearSolicitud = doctor?.estado === 'activo'
   const estaEnVacaciones = doctor?.estado === 'vacaciones'
 
+  // Progreso del formulario: qué pasos están completados
+  const pasoPacienteCompleto = formData.nombre.trim().length >= 2 && formData.apellido.trim().length >= 2 && validateRut(formData.rut)
+  const pasoOperacionCompleto = !!formData.codigo_operacion
+  const pasoInsumosCompleto = formData.insumos.length > 0
+  const pasoHorarioCompleto = formData.dejar_fecha_a_pabellon || !!formData.fecha_preferida
+
+  const pasos = [
+    { label: 'Paciente', completo: pasoPacienteCompleto },
+    { label: 'Operación', completo: pasoOperacionCompleto },
+    { label: 'Insumos', completo: pasoInsumosCompleto },
+    { label: 'Horario', completo: pasoHorarioCompleto },
+  ]
+  const completados = pasos.filter(p => p.completo).length
+
   return (
     <div className="space-y-6">
       <h1 className={`text-3xl font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>Crear Ficha de Paciente</h1>
+
+      {/* Indicador de progreso */}
+      <div className={`rounded-xl border p-4 ${theme === 'dark' ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'}`}>
+        <div className="flex items-center gap-2 mb-3">
+          <span className={`text-xs font-black uppercase tracking-widest ${theme === 'dark' ? 'text-slate-400' : 'text-slate-400'}`}>
+            Progreso del formulario
+          </span>
+          <span className={`ml-auto text-xs font-bold ${completados === pasos.length ? 'text-green-600' : (theme === 'dark' ? 'text-slate-400' : 'text-slate-500')}`}>
+            {completados}/{pasos.length} completados
+          </span>
+        </div>
+        <div className="flex gap-2">
+          {pasos.map((paso, i) => (
+            <div key={paso.label} className="flex-1 flex flex-col items-center gap-1">
+              <div className={`w-full h-2 rounded-full transition-colors ${
+                paso.completo
+                  ? 'bg-blue-600'
+                  : (theme === 'dark' ? 'bg-slate-700' : 'bg-slate-200')
+              }`} />
+              <span className={`text-[10px] font-bold ${
+                paso.completo
+                  ? (theme === 'dark' ? 'text-blue-400' : 'text-blue-600')
+                  : (theme === 'dark' ? 'text-slate-500' : 'text-slate-400')
+              }`}>
+                {i + 1}. {paso.label}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
 
       {/* Alerta si el doctor está en vacaciones */}
       {estaEnVacaciones && (
@@ -625,18 +739,21 @@ export default function CrearPaciente() {
                   const sanitized = sanitizeRut(e.target.value)
                   const formatted = formatRut(sanitized)
                   setFormData({ ...formData, rut: formatted })
-                  // Limpiar error cuando el usuario empiece a escribir
-                  if (rutError) {
-                    setRutError('')
+                  if (rutError) setRutError('')
+                  if (pacienteEncontrado) {
+                    setPacienteEncontrado(null)
+                    setHistorialPaciente([])
+                    setSolicitudDuplicadaAlert(false)
+                    setShowHistorial(false)
                   }
                 }}
                 onBlur={() => {
-                  // Validar cuando el usuario sale del campo
                   if (formData.rut && isValidRutFormat(formData.rut)) {
                     if (!validateRut(formData.rut)) {
                       setRutError('El dígito verificador del RUT no es válido')
                     } else {
                       setRutError('')
+                      buscarPacientePorRut(formData.rut)
                     }
                   } else if (formData.rut) {
                     setRutError('El formato del RUT no es válido')
@@ -649,6 +766,67 @@ export default function CrearPaciente() {
               />
               {rutError && (
                 <p className="mt-1 text-sm text-red-600">{rutError}</p>
+              )}
+              {buscandoPaciente && (
+                <p className="mt-1 text-xs text-slate-400">Buscando paciente...</p>
+              )}
+              {pacienteEncontrado && !buscandoPaciente && (
+                <div className="mt-2 space-y-2">
+                  <div className="flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2.5">
+                    <UserPlus className="w-4 h-4 text-blue-500 mt-0.5 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-bold text-blue-800">Paciente encontrado — datos completados</p>
+                      <p className="text-xs text-blue-700">{pacienteEncontrado.nombre} {pacienteEncontrado.apellido}</p>
+                    </div>
+                    {historialPaciente.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setShowHistorial(v => !v)}
+                        className="flex items-center gap-1 text-[10px] font-bold text-blue-700 hover:text-blue-900 shrink-0"
+                      >
+                        <History className="w-3 h-3" />
+                        {historialPaciente.length} solicitud{historialPaciente.length !== 1 ? 'es' : ''}
+                        {showHistorial ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                      </button>
+                    )}
+                  </div>
+
+                  {solicitudDuplicadaAlert && (
+                    <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2.5">
+                      <AlertCircle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+                      <div>
+                        <p className="text-xs font-bold text-amber-800">Posible duplicado</p>
+                        <p className="text-xs text-amber-700">Este paciente tiene solicitudes pendientes. Verifique antes de crear una nueva.</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {showHistorial && historialPaciente.length > 0 && (
+                    <div className="rounded-lg border border-slate-200 bg-white overflow-hidden">
+                      <div className="px-3 py-2 bg-slate-50 border-b border-slate-200">
+                        <p className="text-[10px] font-black text-slate-500 uppercase tracking-wider">Historial de Solicitudes</p>
+                      </div>
+                      <div className="divide-y divide-slate-100">
+                        {historialPaciente.map(s => (
+                          <div key={s.id} className="flex items-center justify-between px-3 py-2">
+                            <div>
+                              <p className="text-xs font-bold text-slate-700">{s.codigo_operacion || '—'}</p>
+                              <p className="text-[10px] text-slate-400">{format(new Date(s.created_at), 'dd/MM/yyyy', { locale: es })}</p>
+                            </div>
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                              s.estado === 'pendiente' ? 'bg-yellow-100 text-yellow-700' :
+                              s.estado === 'aceptada' || s.estado === 'programada' ? 'bg-green-100 text-green-700' :
+                              s.estado === 'rechazada' ? 'bg-red-100 text-red-700' :
+                              'bg-slate-100 text-slate-600'
+                            }`}>
+                              {s.estado}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           </div>
@@ -1093,6 +1271,18 @@ export default function CrearPaciente() {
         message="No ha seleccionado insumos. ¿Desea continuar con la solicitud sin insumos?"
         confirmText="Continuar"
         cancelText="Cancelar"
+        variant="warning"
+      />
+
+      {/* Advertencia de navegación con datos sin guardar */}
+      <ConfirmModal
+        isOpen={blocker.state === 'blocked'}
+        onClose={() => blocker.reset?.()}
+        onConfirm={() => { blocker.proceed?.(); blocker.reset?.() }}
+        title="¿Salir sin guardar?"
+        message="Tienes datos ingresados que se perderán si abandonas esta página. ¿Deseas continuar?"
+        confirmText="Sí, salir"
+        cancelText="Quedarme"
         variant="warning"
       />
     </div>

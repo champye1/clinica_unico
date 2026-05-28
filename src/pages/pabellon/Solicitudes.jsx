@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../config/supabase'
-import { CheckCircle2, Clock, Eye, CalendarClock, X, User, Stethoscope, Package, FileText, CheckCircle, Activity, Lock, Search, XCircle } from 'lucide-react'
+import { CheckCircle2, Clock, Eye, CalendarClock, X, User, Stethoscope, Package, FileText, CheckCircle, Activity, Lock, Search, XCircle, CheckSquare, Square, Ban, AlertCircle, Download } from 'lucide-react'
 import { format } from 'date-fns'
 import { codigosOperaciones } from '../../data/codigosOperaciones'
 import { useNotifications } from '../../hooks/useNotifications'
@@ -26,6 +26,8 @@ export default function Solicitudes() {
   const [busqueda, setBusqueda] = useState('')
   const [filtroDoctor, setFiltroDoctor] = useState('todos')
   const [filtroCodigoOperacion, setFiltroCodigoOperacion] = useState('todos')
+  const [filtroFechaDesde, setFiltroFechaDesde] = useState('')
+  const [filtroFechaHasta, setFiltroFechaHasta] = useState('')
   const debouncedBusqueda = useDebounce(busqueda, 300)
   const [solicitudProgramando, setSolicitudProgramando] = useState(null)
   const [solicitudDetalle, setSolicitudDetalle] = useState(null)
@@ -79,8 +81,9 @@ export default function Solicitudes() {
           patients:patient_id(nombre, apellido, rut, telefono),
           surgery_request_supplies(
             cantidad,
-            supplies:supply_id(nombre, codigo, grupo_prestacion)
-          )
+            supplies:supply_id(nombre, codigo, grupo_prestacion, stock_actual, stock_minimo)
+          ),
+          surgeries(id, estado, fecha, hora_inicio, hora_fin, operating_rooms:operating_room_id(nombre))
         `)
         .is('deleted_at', null)
         .order('created_at', { ascending: false })
@@ -135,6 +138,11 @@ export default function Solicitudes() {
         return false
       }
 
+      // Filtro por rango de fecha (fecha_preferida o created_at)
+      const fechaSolicitud = (s.fecha_preferida || s.created_at || '').slice(0, 10)
+      if (filtroFechaDesde && fechaSolicitud < filtroFechaDesde) return false
+      if (filtroFechaHasta && fechaSolicitud > filtroFechaHasta) return false
+
       // Búsqueda por texto (usando debounced value)
       if (debouncedBusqueda.trim()) {
         const busquedaLower = debouncedBusqueda.toLowerCase()
@@ -155,7 +163,7 @@ export default function Solicitudes() {
 
       return true
     })
-  }, [solicitudes, filtroEstado, filtroDoctor, filtroCodigoOperacion, debouncedBusqueda])
+  }, [solicitudes, filtroEstado, filtroDoctor, filtroCodigoOperacion, filtroFechaDesde, filtroFechaHasta, debouncedBusqueda])
 
   const enviarWhatsApp = async (solicitud, tipo) => {
     const nombreDoctor   = solicitud.doctors ? `${solicitud.doctors.nombre} ${solicitud.doctors.apellido}` : null
@@ -184,18 +192,40 @@ export default function Solicitudes() {
 
   const [showConfirmRechazar, setShowConfirmRechazar] = useState(false)
   const [solicitudARechazar, setSolicitudARechazar] = useState(null)
+  const [motivoRechazo, setMotivoRechazo] = useState('')
+
+  // Lifecycle: completar / cancelar cirugía
+  const [showCompletarModal, setShowCompletarModal] = useState(false)
+  const [solicitudCompletar, setSolicitudCompletar] = useState(null)
+  const [notasCompletacion, setNotasCompletacion] = useState('')
+  const [showCancelarCirugiaModal, setShowCancelarCirugiaModal] = useState(false)
+  const [solicitudCancelar, setSolicitudCancelar] = useState(null)
+
+  // Pre-check de insumos con stock 0
+  const [showInsumosAlert, setShowInsumosAlert] = useState(false)
+  const [insumosConStockCero, setInsumosConStockCero] = useState([])
+  const [accionPendienteInsumosOk, setAccionPendienteInsumosOk] = useState(null)
+
+  // Bulk actions
+  const [seleccionados, setSeleccionados] = useState(new Set())
+  const [showBulkRechazarModal, setShowBulkRechazarModal] = useState(false)
+  const [motivoBulk, setMotivoBulk] = useState('')
 
   const rechazarSolicitud = useMutation({
-    mutationFn: async (solicitud) => {
+    mutationFn: async ({ solicitud, motivo }) => {
       const { error } = await supabase
         .from('surgery_requests')
-        .update({ estado: 'rechazada', updated_at: new Date().toISOString() })
+        .update({
+          estado: 'rechazada',
+          motivo_rechazo: motivo.trim() || null,
+          updated_at: new Date().toISOString(),
+        })
         .eq('id', solicitud.id)
 
       if (error) throw error
       return solicitud
     },
-    onMutate: async (solicitud) => {
+    onMutate: async ({ solicitud }) => {
       await queryClient.cancelQueries({ queryKey: ['solicitudes'] })
       const previousData = queryClient.getQueriesData({ queryKey: ['solicitudes'] })
       queryClient.setQueriesData({ queryKey: ['solicitudes'] }, (old) =>
@@ -203,13 +233,14 @@ export default function Solicitudes() {
       )
       return { previousData }
     },
-    onSuccess: (solicitud) => {
+    onSuccess: ({ solicitud }) => {
       showSuccess('Solicitud rechazada')
       setShowConfirmRechazar(false)
       setSolicitudARechazar(null)
+      setMotivoRechazo('')
       enviarWhatsApp(solicitud, 'rechazada')
     },
-    onError: (error, _solicitud, context) => {
+    onError: (error, _vars, context) => {
       if (context?.previousData) {
         context.previousData.forEach(([queryKey, data]) => {
           queryClient.setQueryData(queryKey, data)
@@ -230,7 +261,110 @@ export default function Solicitudes() {
 
   const confirmarRechazar = () => {
     if (solicitudARechazar) {
-      rechazarSolicitud.mutate(solicitudARechazar)
+      rechazarSolicitud.mutate({ solicitud: solicitudARechazar, motivo: motivoRechazo })
+    }
+  }
+
+  const completarCirugia = useMutation({
+    mutationFn: async ({ solicitud, notas }) => {
+      const cirugia = solicitud.surgeries?.[0]
+      if (!cirugia) throw new Error('No se encontró la cirugía asociada')
+      const { error } = await supabase
+        .from('surgeries')
+        .update({ estado: 'completada', observaciones_post: notas || null, updated_at: new Date().toISOString() })
+        .eq('id', cirugia.id)
+      if (error) throw error
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['solicitudes'] })
+      queryClient.invalidateQueries({ queryKey: ['cirugias-hoy'] })
+      setShowCompletarModal(false)
+      setSolicitudCompletar(null)
+      setNotasCompletacion('')
+      showSuccess('Cirugía marcada como completada')
+    },
+    onError: (error) => showError('Error al completar cirugía: ' + (error.message || 'Error desconocido')),
+  })
+
+  const cancelarCirugiaYa = useMutation({
+    mutationFn: async ({ solicitud }) => {
+      const cirugia = solicitud.surgeries?.[0]
+      if (!cirugia) throw new Error('No se encontró la cirugía asociada')
+      const { error: errSurgery } = await supabase
+        .from('surgeries')
+        .update({ deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+        .eq('id', cirugia.id)
+      if (errSurgery) throw errSurgery
+      const { error: errReq } = await supabase
+        .from('surgery_requests')
+        .update({ estado: 'pendiente', updated_at: new Date().toISOString() })
+        .eq('id', solicitud.id)
+      if (errReq) throw errReq
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['solicitudes'] })
+      queryClient.invalidateQueries({ queryKey: ['solicitudes-pendientes'] })
+      queryClient.invalidateQueries({ queryKey: ['cirugias-hoy'] })
+      setShowCancelarCirugiaModal(false)
+      setSolicitudCancelar(null)
+      showSuccess('Cirugía cancelada — la solicitud volvió a estado pendiente')
+    },
+    onError: (error) => showError('Error al cancelar cirugía: ' + (error.message || 'Error desconocido')),
+  })
+
+  const rechazarBulk = useMutation({
+    mutationFn: async ({ ids, motivo }) => {
+      const { error } = await supabase
+        .from('surgery_requests')
+        .update({ estado: 'rechazada', motivo_rechazo: motivo.trim() || null, updated_at: new Date().toISOString() })
+        .in('id', ids)
+        .eq('estado', 'pendiente')
+      if (error) throw error
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['solicitudes'] })
+      queryClient.invalidateQueries({ queryKey: ['solicitudes-pendientes'] })
+      setShowBulkRechazarModal(false)
+      setSeleccionados(new Set())
+      setMotivoBulk('')
+      showSuccess(`${seleccionados.size} solicitudes rechazadas`)
+    },
+    onError: (error) => showError('Error al rechazar: ' + (error.message || 'Error desconocido')),
+  })
+
+  // Pre-check: bloquear gestión de cupo si stock es insuficiente para algún insumo requerido
+  const checkInsumosYProceder = (solicitud, accion) => {
+    const insuficientes = (solicitud.surgery_request_supplies || [])
+      .filter(item => item.supplies && (item.supplies.stock_actual ?? 0) < (item.cantidad ?? 1))
+      .map(item => ({
+        nombre: item.supplies.nombre,
+        codigo: item.supplies.codigo,
+        stock_actual: item.supplies.stock_actual ?? 0,
+        requerido: item.cantidad ?? 1,
+      }))
+    if (insuficientes.length > 0) {
+      setInsumosConStockCero(insuficientes)
+      setAccionPendienteInsumosOk(() => accion)
+      setShowInsumosAlert(true)
+    } else {
+      accion()
+    }
+  }
+
+  // Bulk select helpers
+  const toggleSeleccion = (id) => {
+    setSeleccionados(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+  const toggleSeleccionarTodos = () => {
+    const pendientes = solicitudesFiltradas.filter(s => s.estado === 'pendiente').map(s => s.id)
+    if (pendientes.every(id => seleccionados.has(id))) {
+      setSeleccionados(new Set())
+    } else {
+      setSeleccionados(new Set(pendientes))
     }
   }
 
@@ -605,7 +739,7 @@ export default function Solicitudes() {
   const tieneHorarioPreferido = (solicitud) => Boolean(obtenerHorarioPreferido(solicitud))
 
   // Aceptar directamente el horario definido por el médico (sin pasar por el calendario)
-  const handleAceptarHorarioMedico = (solicitud) => {
+  const handleAceptarHorarioMedicoDirecto = (solicitud) => {
     const horario = obtenerHorarioPreferido(solicitud)
     if (!horario) {
       showError('La solicitud no tiene un horario preferido válido para aceptar.')
@@ -635,11 +769,15 @@ export default function Solicitudes() {
     })
   }
 
+  const handleAceptarHorarioMedico = (solicitud) => {
+    checkInsumosYProceder(solicitud, () => handleAceptarHorarioMedicoDirecto(solicitud))
+  }
+
   const handleAceptarYProgramar = (solicitud) => {
-    // Guardar la solicitud en sessionStorage para que el calendario la pueda recuperar
-    sessionStorage.setItem('solicitud_gestionando', JSON.stringify(solicitud))
-    // Navegar al calendario
-    navigate('/pabellon/calendario')
+    checkInsumosYProceder(solicitud, () => {
+      sessionStorage.setItem('solicitud_gestionando', JSON.stringify(solicitud))
+      navigate('/pabellon/calendario')
+    })
   }
 
   // Notificar al doctor que pabellón debe reagendar antes de abrir el calendario
@@ -748,10 +886,31 @@ export default function Solicitudes() {
   }
 
 
+  const exportarExcel = async () => {
+    const { utils, writeFile } = await import('xlsx')
+    const filas = solicitudesFiltradas.map(s => ({
+      'Fecha solicitud': format(new Date(s.created_at), 'dd/MM/yyyy'),
+      'Paciente': `${s.patients?.nombre || ''} ${s.patients?.apellido || ''}`.trim(),
+      'RUT Paciente': s.patients?.rut || '',
+      'Doctor': `${s.doctors?.nombre || ''} ${s.doctors?.apellido || ''}`.trim(),
+      'Especialidad': s.doctors?.especialidad || '',
+      'Código operación': s.codigo_operacion || '',
+      'Estado': s.estado || '',
+      'Fecha preferida': s.fecha_preferida || '',
+      'Hora inicio': s.hora_recomendada || '',
+      'Hora fin': s.hora_fin_recomendada || '',
+      'Observaciones': s.observaciones || '',
+    }))
+    const ws = utils.json_to_sheet(filas)
+    const wb = utils.book_new()
+    utils.book_append_sheet(wb, ws, 'Solicitudes')
+    writeFile(wb, `solicitudes-${format(new Date(), 'yyyy-MM-dd')}.xlsx`)
+  }
+
   return (
     <div className="animate-in fade-in slide-in-from-right duration-500 max-w-5xl mx-auto px-4 sm:px-6 lg:px-0">
       {/* Header centrado */}
-      <div className="mb-6 sm:mb-8 lg:mb-10 text-center">
+      <div className="mb-6 sm:mb-8 lg:mb-10 text-center relative">
         <h2 className={`text-xl sm:text-2xl lg:text-3xl font-black tracking-tighter uppercase mb-2 ${
           theme === 'dark' ? 'text-white' : 'text-slate-900'
         }`}>
@@ -762,6 +921,15 @@ export default function Solicitudes() {
         }`}>
           MÉDICOS PENDIENTES DE AGENDAMIENTO
         </p>
+        {solicitudesFiltradas.length > 0 && (
+          <button
+            onClick={exportarExcel}
+            title="Exportar lista actual a Excel"
+            className="absolute right-0 top-0 flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-colors"
+          >
+            <Download size={14} /> Excel
+          </button>
+        )}
       </div>
 
       {/* Búsqueda y Filtros Avanzados */}
@@ -788,7 +956,7 @@ export default function Solicitudes() {
         </div>
 
         {/* Filtros Múltiples */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 lg:gap-x-4 lg:gap-y-3">
           <div>
             <label className={`text-[10px] sm:text-xs font-black uppercase tracking-widest mb-1.5 sm:mb-2 block ${
               theme === 'dark' ? 'text-slate-400' : 'text-slate-400'
@@ -867,10 +1035,50 @@ export default function Solicitudes() {
               <option value="rechazada">Rechazadas</option>
             </select>
           </div>
+
+          <div>
+            <label className={`text-[10px] sm:text-xs font-black uppercase tracking-widest mb-1.5 sm:mb-2 block ${
+              theme === 'dark' ? 'text-slate-400' : 'text-slate-400'
+            }`}>
+              Fecha desde
+            </label>
+            <input
+              type="date"
+              value={filtroFechaDesde}
+              onChange={(e) => setFiltroFechaDesde(e.target.value)}
+              className={`w-full px-3 sm:px-4 py-2 sm:py-2.5 border-2 rounded-lg sm:rounded-xl focus:border-blue-500 focus:outline-none font-bold text-sm sm:text-base touch-manipulation ${
+                theme === 'dark'
+                  ? 'bg-slate-800 border-slate-700 text-white'
+                  : theme === 'medical'
+                  ? 'bg-white border-blue-200 text-slate-700'
+                  : 'bg-white border-slate-200 text-slate-700'
+              }`}
+            />
+          </div>
+
+          <div>
+            <label className={`text-[10px] sm:text-xs font-black uppercase tracking-widest mb-1.5 sm:mb-2 block ${
+              theme === 'dark' ? 'text-slate-400' : 'text-slate-400'
+            }`}>
+              Fecha hasta
+            </label>
+            <input
+              type="date"
+              value={filtroFechaHasta}
+              onChange={(e) => setFiltroFechaHasta(e.target.value)}
+              className={`w-full px-3 sm:px-4 py-2 sm:py-2.5 border-2 rounded-lg sm:rounded-xl focus:border-blue-500 focus:outline-none font-bold text-sm sm:text-base touch-manipulation ${
+                theme === 'dark'
+                  ? 'bg-slate-800 border-slate-700 text-white'
+                  : theme === 'medical'
+                  ? 'bg-white border-blue-200 text-slate-700'
+                  : 'bg-white border-slate-200 text-slate-700'
+              }`}
+            />
+          </div>
         </div>
 
         {/* Contador de resultados */}
-        {busqueda || filtroDoctor !== 'todos' || filtroCodigoOperacion !== 'todos' || filtroEstado !== 'todas' ? (
+        {busqueda || filtroDoctor !== 'todos' || filtroCodigoOperacion !== 'todos' || filtroEstado !== 'todas' || filtroFechaDesde || filtroFechaHasta ? (
           <div className={`text-xs sm:text-sm font-bold ${
             theme === 'dark' ? 'text-slate-400' : 'text-slate-600'
           }`}>
@@ -914,6 +1122,28 @@ export default function Solicitudes() {
         ))}
       </div>
 
+      {/* Barra de acciones masivas */}
+      {seleccionados.size > 0 && (
+        <div className={`sticky top-2 z-30 flex items-center justify-between gap-3 rounded-2xl border-2 px-4 py-3 shadow-lg ${
+          theme === 'dark' ? 'bg-slate-800 border-blue-700' : 'bg-blue-50 border-blue-400'
+        }`}>
+          <div className="flex items-center gap-3">
+            <button onClick={() => setSeleccionados(new Set())} aria-label="Limpiar selección">
+              <X className={`w-4 h-4 ${theme === 'dark' ? 'text-slate-300' : 'text-slate-600'}`} aria-hidden="true" />
+            </button>
+            <span className={`text-sm font-bold ${theme === 'dark' ? 'text-white' : 'text-slate-800'}`}>
+              {seleccionados.size} seleccionada{seleccionados.size !== 1 ? 's' : ''}
+            </span>
+          </div>
+          <button
+            onClick={() => setShowBulkRechazarModal(true)}
+            className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-black text-xs uppercase rounded-xl transition-colors"
+          >
+            Rechazar seleccionadas
+          </button>
+        </div>
+      )}
+
       {/* Tarjetas de solicitudes */}
       <div className="grid gap-4 sm:gap-6">
         {isLoading ? (
@@ -945,6 +1175,20 @@ export default function Solicitudes() {
                       : 'bg-white border-slate-100'
                   }`}
                 >
+                  {/* Bulk select checkbox (solo para pendientes) */}
+                  {solicitud.estado === 'pendiente' && (
+                    <button
+                      onClick={() => toggleSeleccion(solicitud.id)}
+                      className="mr-2 flex-shrink-0 self-center"
+                      aria-label={seleccionados.has(solicitud.id) ? 'Deseleccionar solicitud' : 'Seleccionar solicitud'}
+                    >
+                      {seleccionados.has(solicitud.id)
+                        ? <CheckSquare className="w-5 h-5 text-blue-600" aria-hidden="true" />
+                        : <Square className="w-5 h-5 text-slate-400" aria-hidden="true" />
+                      }
+                    </button>
+                  )}
+
                   {/* Lado izquierdo: Círculo con inicial */}
                   <div className={`w-12 h-12 sm:w-14 sm:h-14 ${priorityColor} rounded-full flex items-center justify-center font-black text-base sm:text-lg text-white shadow-inner mb-3 sm:mb-0 flex-shrink-0`}>
                     {initial}
@@ -996,6 +1240,28 @@ export default function Solicitudes() {
                       <Eye className="w-4 h-4 sm:w-5 sm:h-5" aria-hidden="true" />
                     </button>
                     
+                    {/* Completar / Cancelar cirugía ya programada */}
+                    {solicitud.estado === 'aceptada' && solicitud.surgeries?.[0] && solicitud.surgeries[0].estado !== 'completada' && (
+                      <>
+                        <button
+                          onClick={() => { setSolicitudCompletar(solicitud); setShowCompletarModal(true) }}
+                          className="bg-green-600 hover:bg-green-700 text-white p-2.5 sm:p-3 rounded-lg sm:rounded-xl shadow-lg active:scale-95 transition-all touch-manipulation"
+                          title="Marcar cirugía como completada"
+                          aria-label="Marcar cirugía como completada"
+                        >
+                          <CheckCircle2 className="w-4 h-4 sm:w-5 sm:h-5" aria-hidden="true" />
+                        </button>
+                        <button
+                          onClick={() => { setSolicitudCancelar(solicitud); setShowCancelarCirugiaModal(true) }}
+                          className="bg-slate-500 hover:bg-slate-600 text-white p-2.5 sm:p-3 rounded-lg sm:rounded-xl shadow-lg active:scale-95 transition-all touch-manipulation"
+                          title="Cancelar cirugía (vuelve a pendiente)"
+                          aria-label="Cancelar cirugía programada"
+                        >
+                          <Ban className="w-4 h-4 sm:w-5 sm:h-5" aria-hidden="true" />
+                        </button>
+                      </>
+                    )}
+
                     {/* Botón Reagendar: cuando el doctor pidió reagendamiento y la solicitud ya está aceptada/programada */}
                     {solicitud.estado === 'aceptada' && solicitud.reagendamiento_notificado_at && (
                       <>
@@ -1276,27 +1542,43 @@ export default function Solicitudes() {
                 </div>
               )}
 
-              {/* Información Adicional */}
-              <div className="bg-slate-50 rounded-2xl p-6 border border-slate-100">
+              {/* Historial de Estado */}
+              <div className={`rounded-2xl p-6 border ${solicitudDetalle.estado === 'rechazada' ? 'bg-red-50 border-red-100' : 'bg-slate-50 border-slate-100'}`}>
                 <div className="flex items-center gap-3 mb-4">
-                  <div className="w-10 h-10 rounded-xl bg-slate-200 flex items-center justify-center">
-                    <Clock className="w-5 h-5 text-slate-600" />
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${solicitudDetalle.estado === 'rechazada' ? 'bg-red-100' : 'bg-slate-200'}`}>
+                    <Clock className={`w-5 h-5 ${solicitudDetalle.estado === 'rechazada' ? 'text-red-600' : 'text-slate-600'}`} />
                   </div>
-                  <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight">Información Adicional</h3>
+                  <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight">Historial de Estado</h3>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-xs font-black text-slate-400 uppercase tracking-wider mb-1">Fecha de Creación</p>
-                    <p className="text-sm font-bold text-slate-700">
-                      {format(new Date(solicitudDetalle.created_at), 'dd/MM/yyyy HH:mm')}
-                    </p>
+                <div className="space-y-3">
+                  <div className="flex items-start gap-3">
+                    <div className="w-2 h-2 rounded-full bg-blue-400 mt-1.5 shrink-0" />
+                    <div>
+                      <p className="text-xs font-black text-slate-400 uppercase tracking-wider">Solicitud creada</p>
+                      <p className="text-sm font-bold text-slate-700">{format(new Date(solicitudDetalle.created_at), 'dd/MM/yyyy HH:mm')}</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-xs font-black text-slate-400 uppercase tracking-wider mb-1">Última Actualización</p>
-                    <p className="text-sm font-bold text-slate-700">
-                      {format(new Date(solicitudDetalle.updated_at), 'dd/MM/yyyy HH:mm')}
-                    </p>
-                  </div>
+                  {solicitudDetalle.updated_at && solicitudDetalle.updated_at !== solicitudDetalle.created_at && (
+                    <div className="flex items-start gap-3">
+                      <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${solicitudDetalle.estado === 'rechazada' ? 'bg-red-400' : solicitudDetalle.estado === 'aceptada' ? 'bg-green-400' : 'bg-slate-400'}`} />
+                      <div>
+                        <p className="text-xs font-black text-slate-400 uppercase tracking-wider">Última actualización</p>
+                        <p className="text-sm font-bold text-slate-700">{format(new Date(solicitudDetalle.updated_at), 'dd/MM/yyyy HH:mm')}</p>
+                        <span className={`inline-block mt-1 px-2 py-0.5 rounded-full text-[10px] font-bold capitalize ${getEstadoBadge(solicitudDetalle.estado)}`}>
+                          {solicitudDetalle.estado}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                  {solicitudDetalle.motivo_rechazo && (
+                    <div className="mt-2 bg-red-100 border border-red-200 rounded-xl p-4 flex items-start gap-3">
+                      <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-xs font-black text-red-700 uppercase tracking-wider mb-1">Motivo de rechazo</p>
+                        <p className="text-sm text-red-800 font-medium">{solicitudDetalle.motivo_rechazo}</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -1736,22 +2018,34 @@ export default function Solicitudes() {
         title="Confirmar Rechazo"
       >
         {solicitudARechazar && (
-          <div className="space-y-6">
-            <p className="text-slate-700">
+          <div className="space-y-5">
+            <p className={theme === 'dark' ? 'text-slate-200' : 'text-slate-700'}>
               ¿Está seguro de que desea rechazar la solicitud de{' '}
               <span className="font-black">
                 {solicitudARechazar.patients?.nombre} {solicitudARechazar.patients?.apellido}
               </span>?
             </p>
-            <p className="text-sm text-slate-500">
-              Esta acción no se puede deshacer.
-            </p>
+            <div>
+              <label className={`block text-sm font-semibold mb-1.5 ${theme === 'dark' ? 'text-slate-300' : 'text-slate-700'}`}>
+                Motivo del rechazo <span className={`font-normal ${theme === 'dark' ? 'text-slate-400' : 'text-slate-400'}`}>(opcional — el médico lo verá)</span>
+              </label>
+              <textarea
+                value={motivoRechazo}
+                onChange={e => setMotivoRechazo(e.target.value)}
+                rows={3}
+                maxLength={500}
+                placeholder="Ej: Sin disponibilidad esa semana, código de operación incorrecto, paciente sin exámenes pre-quirúrgicos..."
+                className={`w-full rounded-xl border px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-red-400 ${theme === 'dark' ? 'bg-slate-700 border-slate-600 text-white placeholder-slate-400' : 'bg-white border-slate-300 text-slate-900 placeholder-slate-400'}`}
+              />
+              <p className={`text-xs mt-1 text-right ${theme === 'dark' ? 'text-slate-400' : 'text-slate-400'}`}>{motivoRechazo.length}/500</p>
+            </div>
             <div className="flex gap-4 justify-end">
               <Button
                 variant="secondary"
                 onClick={() => {
                   setShowConfirmRechazar(false)
                   setSolicitudARechazar(null)
+                  setMotivoRechazo('')
                 }}
                 disabled={rechazarSolicitud.isPending}
               >
@@ -1768,6 +2062,155 @@ export default function Solicitudes() {
             </div>
           </div>
         )}
+      </Modal>
+
+      {/* Modal: Marcar cirugía como completada */}
+      <Modal
+        isOpen={showCompletarModal}
+        onClose={() => { setShowCompletarModal(false); setSolicitudCompletar(null); setNotasCompletacion('') }}
+        title="Marcar cirugía como completada"
+      >
+        {solicitudCompletar && (
+          <div className="space-y-4">
+            <p className={`text-sm font-semibold ${theme === 'dark' ? 'text-slate-300' : 'text-slate-600'}`}>
+              Paciente: <span className="font-black">{solicitudCompletar.patients?.nombre} {solicitudCompletar.patients?.apellido}</span>
+            </p>
+            <div>
+              <label className="label-field">Notas post-operatorias (opcional)</label>
+              <textarea
+                value={notasCompletacion}
+                onChange={e => setNotasCompletacion(e.target.value)}
+                rows={3}
+                maxLength={1000}
+                className="input-field resize-none"
+                placeholder="Observaciones, complicaciones, notas del procedimiento..."
+              />
+            </div>
+            <div className="flex gap-3 justify-end">
+              <Button variant="secondary" onClick={() => { setShowCompletarModal(false); setSolicitudCompletar(null) }}>
+                Cancelar
+              </Button>
+              <Button
+                onClick={() => completarCirugia.mutate({ solicitud: solicitudCompletar, notas: notasCompletacion })}
+                loading={completarCirugia.isPending}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                Marcar como completada
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Modal: Cancelar cirugía ya programada */}
+      <Modal
+        isOpen={showCancelarCirugiaModal}
+        onClose={() => { setShowCancelarCirugiaModal(false); setSolicitudCancelar(null) }}
+        title="Cancelar cirugía programada"
+      >
+        {solicitudCancelar && (
+          <div className="space-y-4">
+            <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl p-4">
+              <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5 shrink-0" aria-hidden="true" />
+              <p className="text-sm text-amber-800 font-semibold">
+                La cirugía de <strong>{solicitudCancelar.patients?.nombre} {solicitudCancelar.patients?.apellido}</strong> volverá a estado <strong>pendiente</strong> y el médico podrá solicitar una nueva fecha.
+              </p>
+            </div>
+            <div className="flex gap-3 justify-end">
+              <Button variant="secondary" onClick={() => { setShowCancelarCirugiaModal(false); setSolicitudCancelar(null) }}>
+                Volver
+              </Button>
+              <Button
+                onClick={() => cancelarCirugiaYa.mutate({ solicitud: solicitudCancelar })}
+                loading={cancelarCirugiaYa.isPending}
+                className="bg-slate-700 hover:bg-slate-800"
+              >
+                Sí, cancelar cirugía
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Modal: Bloqueo por stock insuficiente */}
+      <Modal
+        isOpen={showInsumosAlert}
+        onClose={() => { setShowInsumosAlert(false); setAccionPendienteInsumosOk(null) }}
+        title="Stock insuficiente — no se puede gestionar"
+      >
+        <div className="space-y-4">
+          <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-xl p-4">
+            <AlertCircle className="w-5 h-5 text-red-600 mt-0.5 shrink-0" aria-hidden="true" />
+            <div>
+              <p className="text-sm text-red-800 font-bold">No hay stock suficiente para gestionar este cupo.</p>
+              <p className="text-xs text-red-700 mt-1">Reponga los insumos en la sección de Insumos antes de continuar.</p>
+            </div>
+          </div>
+          <ul className="space-y-1.5">
+            {insumosConStockCero.map(ins => (
+              <li key={ins.nombre} className={`flex items-center justify-between text-sm font-medium px-3 py-2 rounded-lg ${theme === 'dark' ? 'bg-red-900/30 text-red-300' : 'bg-red-50 text-red-700'}`}>
+                <span>{ins.nombre} {ins.codigo ? `(${ins.codigo})` : ''}</span>
+                <span className="text-xs font-bold shrink-0 ml-3">
+                  Disponible: <span className="text-red-600">{ins.stock_actual}</span> / Requerido: <span className="font-black">{ins.requerido}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+          <div className="flex gap-3 justify-end">
+            <Button onClick={() => { setShowInsumosAlert(false); setAccionPendienteInsumosOk(null) }}>
+              Entendido
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Modal: Rechazar múltiples */}
+      <Modal
+        isOpen={showBulkRechazarModal}
+        onClose={() => { setShowBulkRechazarModal(false); setMotivoBulk('') }}
+        title={`Rechazar ${seleccionados.size} solicitudes`}
+      >
+        <div className="space-y-4">
+          {/* Vista previa de solicitudes afectadas */}
+          <div className={`rounded-xl border px-4 py-3 ${theme === 'dark' ? 'bg-red-900/20 border-red-800' : 'bg-red-50 border-red-200'}`}>
+            <p className={`text-xs font-black uppercase tracking-widest mb-2 ${theme === 'dark' ? 'text-red-300' : 'text-red-700'}`}>
+              Se rechazarán {seleccionados.size} solicitud{seleccionados.size !== 1 ? 'es' : ''}:
+            </p>
+            <ul className="space-y-1 max-h-36 overflow-y-auto custom-scrollbar">
+              {solicitudesFiltradas
+                .filter(s => seleccionados.has(s.id))
+                .map(s => (
+                  <li key={s.id} className={`text-xs font-medium flex items-center justify-between ${theme === 'dark' ? 'text-red-200' : 'text-red-800'}`}>
+                    <span>{s.patients?.nombre} {s.patients?.apellido}</span>
+                    <span className={`text-[10px] font-bold ${theme === 'dark' ? 'text-red-400' : 'text-red-500'}`}>
+                      Dr. {s.doctors?.apellido}
+                    </span>
+                  </li>
+                ))}
+            </ul>
+          </div>
+          <div>
+            <label className="label-field">Motivo del rechazo (opcional)</label>
+            <textarea
+              value={motivoBulk}
+              onChange={e => setMotivoBulk(e.target.value)}
+              rows={3}
+              maxLength={500}
+              className="input-field resize-none"
+              placeholder="Motivo para todas las solicitudes seleccionadas..."
+            />
+          </div>
+          <div className="flex gap-3 justify-end">
+            <Button variant="secondary" onClick={() => setShowBulkRechazarModal(false)}>Cancelar</Button>
+            <Button
+              onClick={() => rechazarBulk.mutate({ ids: Array.from(seleccionados), motivo: motivoBulk })}
+              loading={rechazarBulk.isPending}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Confirmar rechazo masivo
+            </Button>
+          </div>
+        </div>
       </Modal>
     </div>
   )

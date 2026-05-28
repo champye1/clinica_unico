@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../config/supabase'
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Info, XCircle } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Info, XCircle, Search } from 'lucide-react'
 import { useNotifications } from '../../hooks/useNotifications'
 import Modal from '../../components/common/Modal'
 import Button from '../../components/common/Button'
@@ -381,6 +382,7 @@ const DayView = ({ day, pabellones, cirugias, onCancelarClick }) => {
 
 export default function Calendario() {
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
   const { showSuccess, showError } = useNotifications()
   const [anio, setAnio] = useState(new Date().getFullYear())
   
@@ -567,6 +569,15 @@ export default function Calendario() {
           />
         </div>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
+           {/* Buscar disponibilidad — lleva a HorariosDisponibles */}
+           <button
+             onClick={() => navigate('/doctor/horarios')}
+             className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-black uppercase tracking-wider rounded-2xl transition-colors shadow-sm"
+             title="Ver horarios disponibles en todos los pabellones"
+           >
+             <Search className="w-3.5 h-3.5" />
+             Buscar disponibilidad
+           </button>
            {/* Selector de año solo visible en vista anual */}
            {view === 'year' && (
              <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-2xl px-3 py-2">

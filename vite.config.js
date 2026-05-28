@@ -75,8 +75,14 @@ export default defineConfig({
     include: ['src/**/*.{test,spec}.{js,jsx,ts,tsx}'],
     coverage: {
       provider: 'v8',
-      reporter: ['text', 'html'],
-      exclude: ['node_modules/', 'src/__tests__/'],
+      reporter: ['text', 'html', 'lcov'],
+      exclude: ['node_modules/', 'src/__tests__/', 'src/main.jsx', 'src/config/'],
+      thresholds: {
+        lines: 60,
+        functions: 55,
+        branches: 50,
+        statements: 60,
+      },
     },
   },
 })

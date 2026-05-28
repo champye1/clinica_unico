@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from 'react'
+import { useLocation } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../../config/supabase'
-import { Plus, Edit, Trash2, Search, Download, FileSpreadsheet, AlertTriangle, Package } from 'lucide-react'
+import { Plus, Edit, Trash2, Search, Download, FileSpreadsheet, AlertTriangle, Package, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
 import { useNotifications } from '../../hooks/useNotifications'
 import { useDebounce } from '../../hooks/useDebounce'
 import { exportToCSV, exportToExcel } from '../../utils/exportData'
@@ -13,8 +14,10 @@ import LoadingSpinner from '../../components/common/LoadingSpinner'
 import { useTheme } from '../../contexts/ThemeContext'
 
 export default function Insumos() {
+  const location = useLocation()
   const [busqueda, setBusqueda] = useState('')
   const [filtroTipo, setFiltroTipo] = useState('nombre') // nombre o codigo
+  const [soloStockBajo, setSoloStockBajo] = useState(() => !!location.state?.filtroStockBajo)
   const [mostrarFormulario, setMostrarFormulario] = useState(false)
   const [insumoEditando, setInsumoEditando] = useState(null)
   const [formData, setFormData] = useState({
@@ -33,6 +36,8 @@ export default function Insumos() {
   const [codigoError, setCodigoError] = useState('')
   const [codigoTouched, setCodigoTouched] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
+  const [sortField, setSortField] = useState('nombre')
+  const [sortDir, setSortDir] = useState('asc')
   const itemsPerPage = 20
 
   const queryClient = useQueryClient()
@@ -65,12 +70,60 @@ export default function Insumos() {
     },
   })
 
-  // Paginación
-  const totalPages = Math.ceil(insumos.length / itemsPerPage)
+  // Stock comprometido por cirugías futuras no canceladas
+  const { data: stockComprometidoMap = {} } = useQuery({
+    queryKey: ['stock-comprometido'],
+    queryFn: async () => {
+      const hoy = new Date().toISOString().slice(0, 10)
+      const { data, error } = await supabase
+        .from('surgery_supplies')
+        .select('supply_id, cantidad, surgeries!inner(estado, fecha, deleted_at)')
+        .neq('surgeries.estado', 'cancelada')
+        .gte('surgeries.fecha', hoy)
+        .is('surgeries.deleted_at', null)
+      if (error) return {}
+      const map = {}
+      for (const row of data || []) {
+        map[row.supply_id] = (map[row.supply_id] || 0) + (row.cantidad || 0)
+      }
+      return map
+    },
+    refetchInterval: 60000,
+  })
+
+  // Ordenamiento + paginación
+  const insumosFiltrados = useMemo(() =>
+    soloStockBajo ? insumos.filter(i => (i.stock_actual ?? 0) <= (i.stock_minimo ?? 0)) : insumos,
+  [insumos, soloStockBajo])
+
+  const totalPages = Math.ceil(insumosFiltrados.length / itemsPerPage)
   const insumosPaginados = useMemo(() => {
+    const sorted = [...insumosFiltrados].sort((a, b) => {
+      const va = a[sortField] ?? ''
+      const vb = b[sortField] ?? ''
+      const cmp = typeof va === 'number' && typeof vb === 'number'
+        ? va - vb
+        : String(va).localeCompare(String(vb), 'es', { sensitivity: 'base' })
+      return sortDir === 'asc' ? cmp : -cmp
+    })
     const startIndex = (currentPage - 1) * itemsPerPage
-    return insumos.slice(startIndex, startIndex + itemsPerPage)
-  }, [insumos, currentPage, itemsPerPage])
+    return sorted.slice(startIndex, startIndex + itemsPerPage)
+  }, [insumos, currentPage, itemsPerPage, sortField, sortDir])
+
+  const handleSort = (field) => {
+    if (sortField === field) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortField(field)
+      setSortDir('asc')
+    }
+    setCurrentPage(1)
+  }
+
+  const SortIcon = ({ field }) => {
+    if (sortField !== field) return <ArrowUpDown className="w-3 h-3 opacity-40" />
+    return sortDir === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />
+  }
 
   // Resetear página cuando cambia la búsqueda
   useEffect(() => {
@@ -362,6 +415,19 @@ export default function Insumos() {
         </div>
       </div>
 
+      {/* Filtro stock bajo activo */}
+      {soloStockBajo && (
+        <div className={`flex items-center justify-between gap-3 rounded-xl border px-4 py-2.5 ${theme === 'dark' ? 'bg-red-900/20 border-red-800 text-red-300' : 'bg-red-50 border-red-200 text-red-700'}`}>
+          <div className="flex items-center gap-2 text-xs font-bold">
+            <AlertTriangle className="w-4 h-4" />
+            Mostrando solo insumos con stock bajo o crítico
+          </div>
+          <button onClick={() => setSoloStockBajo(false)} className="text-xs font-bold underline hover:no-underline">
+            Ver todos
+          </button>
+        </div>
+      )}
+
       {/* Búsqueda */}
       <div className="card">
         <div className="flex gap-4">
@@ -521,24 +587,43 @@ export default function Insumos() {
           <table className="w-full">
             <thead>
               <tr className={`border-b ${theme === 'dark' ? 'border-slate-700' : 'border-slate-200'}`}>
-                <th className={`text-left py-3 px-4 font-medium ${theme === 'dark' ? 'text-slate-200' : 'text-gray-700'}`}>Nombre</th>
-                <th className={`text-left py-3 px-4 font-medium ${theme === 'dark' ? 'text-slate-200' : 'text-gray-700'}`}>Código</th>
-                <th className={`text-left py-3 px-4 font-medium ${theme === 'dark' ? 'text-slate-200' : 'text-gray-700'}`}>Grupo Prestación</th>
-                <th className={`text-left py-3 px-4 font-medium ${theme === 'dark' ? 'text-slate-200' : 'text-gray-700'}`}>Proveedor</th>
-                <th className={`text-left py-3 px-4 font-medium ${theme === 'dark' ? 'text-slate-200' : 'text-gray-700'}`} title="Grupos de prestación FONASA para los que aplica este insumo (ej. 18=general, 11=ortopedia). Vacío = todas las cirugías.">Grupos Fonasa</th>
-                <th className={`text-right py-3 px-4 font-medium ${theme === 'dark' ? 'text-slate-200' : 'text-gray-700'}`}>Stock</th>
-                <th className={`text-right py-3 px-4 font-medium ${theme === 'dark' ? 'text-slate-200' : 'text-gray-700'}`}>Mín.</th>
+                {[
+                  { field: 'nombre', label: 'Nombre', align: 'left' },
+                  { field: 'codigo', label: 'Código', align: 'left' },
+                  { field: 'grupo_prestacion', label: 'Grupo Prestación', align: 'left' },
+                  { field: 'proveedor', label: 'Proveedor', align: 'left' },
+                  { field: 'grupos_fonasa', label: 'Grupos Fonasa', align: 'left', title: 'Grupos de prestación FONASA para los que aplica este insumo (ej. 18=general, 11=ortopedia). Vacío = todas las cirugías.' },
+                  { field: 'stock_actual', label: 'Stock', align: 'right' },
+                  { field: 'stock_minimo', label: 'Mín.', align: 'right' },
+                  { field: '_comprometido', label: 'Comprometido', align: 'right', title: 'Cantidad reservada por cirugías futuras programadas' },
+                  { field: '_libre', label: 'Libre', align: 'right', title: 'Stock disponible: stock_actual − comprometido' },
+                ].map(({ field, label, align, title }) => (
+                  <th
+                    key={field}
+                    title={title}
+                    className={`py-3 px-4 font-medium text-${align} ${theme === 'dark' ? 'text-slate-200' : 'text-gray-700'}`}
+                  >
+                    <button
+                      onClick={() => handleSort(field)}
+                      className={`inline-flex items-center gap-1 hover:text-blue-600 transition-colors ${align === 'right' ? 'flex-row-reverse w-full justify-start' : ''}`}
+                      aria-label={`Ordenar por ${label}`}
+                    >
+                      {label}
+                      <SortIcon field={field} />
+                    </button>
+                  </th>
+                ))}
                 <th className={`text-left py-3 px-4 font-medium ${theme === 'dark' ? 'text-slate-200' : 'text-gray-700'}`}>Acciones</th>
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan="8" className={`text-center py-8 ${theme === 'dark' ? 'text-slate-300' : 'text-gray-600'}`}>Cargando...</td>
+                  <td colSpan="10" className={`text-center py-8 ${theme === 'dark' ? 'text-slate-300' : 'text-gray-600'}`}>Cargando...</td>
                 </tr>
-              ) : insumos.length === 0 ? (
+              ) : insumosFiltrados.length === 0 ? (
                 <tr>
-                  <td colSpan="8" className={`text-center py-8 ${theme === 'dark' ? 'text-slate-300' : 'text-gray-500'}`}>
+                  <td colSpan="10" className={`text-center py-8 ${theme === 'dark' ? 'text-slate-300' : 'text-gray-500'}`}>
                     No se encontraron insumos
                   </td>
                 </tr>
@@ -573,6 +658,19 @@ export default function Insumos() {
                       </td>
                       <td className={`py-3 px-4 text-right text-sm ${theme === 'dark' ? 'text-slate-400' : 'text-gray-500'}`}>
                         {insumo.stock_minimo ?? 0}
+                      </td>
+                      <td className="py-3 px-4 text-right text-sm">
+                        {(() => {
+                          const comp = stockComprometidoMap[insumo.id] || 0
+                          return <span className={comp > 0 ? 'font-bold text-orange-600' : (theme === 'dark' ? 'text-slate-500' : 'text-gray-400')}>{comp}</span>
+                        })()}
+                      </td>
+                      <td className="py-3 px-4 text-right text-sm">
+                        {(() => {
+                          const comp = stockComprometidoMap[insumo.id] || 0
+                          const libre = (insumo.stock_actual ?? 0) - comp
+                          return <span className={`font-bold ${libre < 0 ? 'text-red-600' : libre === 0 ? (theme === 'dark' ? 'text-slate-400' : 'text-gray-400') : 'text-green-600'}`}>{libre}</span>
+                        })()}
                       </td>
                       <td className="py-3 px-4">
                         <div className="flex gap-2">

@@ -2,7 +2,7 @@ import { memo, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X } from 'lucide-react'
 
-function Modal({ isOpen, onClose, children, title, 'aria-label': ariaLabel }) {
+function Modal({ isOpen, onClose, children, title, 'aria-label': ariaLabel, hideClose = false }) {
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden'
@@ -16,7 +16,7 @@ function Modal({ isOpen, onClose, children, title, 'aria-label': ariaLabel }) {
 
   useEffect(() => {
     const handleEscape = (e) => {
-      if (e.key === 'Escape') onClose()
+      if (e.key === 'Escape' && !hideClose) onClose()
     }
     if (isOpen) {
       document.addEventListener('keydown', handleEscape)
@@ -24,7 +24,7 @@ function Modal({ isOpen, onClose, children, title, 'aria-label': ariaLabel }) {
     return () => {
       document.removeEventListener('keydown', handleEscape)
     }
-  }, [isOpen, onClose])
+  }, [isOpen, onClose, hideClose])
 
   return (
     <AnimatePresence>
@@ -34,7 +34,7 @@ function Modal({ isOpen, onClose, children, title, 'aria-label': ariaLabel }) {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            onClick={onClose}
+            onClick={hideClose ? undefined : onClose}
             className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[100]"
           />
           <motion.div
@@ -54,13 +54,15 @@ function Modal({ isOpen, onClose, children, title, 'aria-label': ariaLabel }) {
               {title && (
                 <div className="bg-slate-900 text-white p-4 sm:p-5 md:p-6 flex items-center justify-between gap-3">
                   <h2 className="text-lg sm:text-xl font-black uppercase tracking-wide leading-relaxed truncate flex-1">{title}</h2>
-                  <button
-                    onClick={onClose}
-                    className="p-2 hover:bg-white/10 active:bg-white/20 rounded-xl transition-colors flex-shrink-0 touch-manipulation"
-                    aria-label="Cerrar modal"
-                  >
-                    <X size={18} className="sm:w-5 sm:h-5" />
-                  </button>
+                  {!hideClose && (
+                    <button
+                      onClick={onClose}
+                      className="p-2 hover:bg-white/10 active:bg-white/20 rounded-xl transition-colors flex-shrink-0 touch-manipulation"
+                      aria-label="Cerrar modal"
+                    >
+                      <X size={18} className="sm:w-5 sm:h-5" />
+                    </button>
+                  )}
                 </div>
               )}
               <div className="p-4 sm:p-5 md:p-6 overflow-y-auto max-h-[calc(95vh-80px)] sm:max-h-[calc(90vh-100px)] custom-scrollbar">
