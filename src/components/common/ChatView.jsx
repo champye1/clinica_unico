@@ -99,7 +99,6 @@ export default function ChatView({ senderRole, surgeryRequestId = null }) {
   }
 
   const cardBg = dark ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'
-  const textPrimary = dark ? 'text-white' : 'text-slate-900'
   const textSec = dark ? 'text-slate-400' : 'text-slate-500'
 
   const renderMessage = (msg) => {

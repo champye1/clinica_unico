@@ -110,8 +110,6 @@ export default function Disponibilidad() {
   const textPrimary = dark ? 'text-white' : 'text-slate-900'
   const textSec = dark ? 'text-slate-300' : 'text-slate-600'
 
-  const getDiaLabel = (valor) => DIAS.find(d => d.valor === valor)?.label || valor
-
   // Agrupar por día
   const porDia = DIAS.map(d => ({
     ...d,

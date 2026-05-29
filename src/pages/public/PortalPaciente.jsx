@@ -92,7 +92,7 @@ export default function PortalPaciente() {
   const estadoSolicitud = ESTADOS_SOLICITUD[solicitud.estado] || ESTADOS_SOLICITUD.pendiente
   const estadoCirugia = cirugia ? (ESTADOS_CIRUGIA[cirugia.estado] || ESTADOS_CIRUGIA.programada) : null
   const IconEstadoSol = estadoSolicitud.icon
-  const IconEstadoCir = estadoCirugia?.icon
+
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 sm:p-6">

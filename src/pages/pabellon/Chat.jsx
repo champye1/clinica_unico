@@ -74,7 +74,6 @@ export default function Chat() {
   const textPrimary = dark ? 'text-white' : 'text-slate-900'
   const textSec = dark ? 'text-slate-400' : 'text-slate-500'
 
-  const generalThread = { surgery_request_id: null, label: 'Canal General' }
   const selectedKey = selectedRequest ?? '__general__'
 
   return (

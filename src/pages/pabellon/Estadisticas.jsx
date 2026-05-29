@@ -44,7 +44,7 @@ export default function Estadisticas() {
   })
 
   // Solicitudes en el rango
-  const { data: solicitudes = [], isLoading: loadingSolicitudes } = useQuery({
+  const { isLoading: loadingSolicitudes } = useQuery({
     queryKey: ['estadisticas-solicitudes', fechaDesde, fechaHasta],
     queryFn: async () => {
       const { data, error } = await supabase
