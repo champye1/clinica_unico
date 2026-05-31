@@ -60,6 +60,20 @@ export default function SeccionPaciente({
         <p className="text-xs text-slate-400 mt-1">Para notificar al paciente cuando se confirme su hora</p>
       </div>
       <div className="mt-4">
+        <label className="label-field">Previsión de Salud</label>
+        <select
+          value={formData.prevision || ''}
+          onChange={(e) => setFormData({ ...formData, prevision: e.target.value })}
+          className="input-field"
+        >
+          <option value="">Seleccionar...</option>
+          <option value="fonasa">Fonasa</option>
+          <option value="isapre">Isapre</option>
+          <option value="particular">Particular</option>
+          <option value="otro">Otro</option>
+        </select>
+      </div>
+      <div className="mt-4">
         <label className="label-field">RUT *</label>
         <input
           type="text"

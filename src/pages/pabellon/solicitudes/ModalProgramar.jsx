@@ -248,7 +248,12 @@ export default function ModalProgramar({
                       type="button"
                       onClick={() => {
                         const [hours, minutes] = formProgramacion.hora_inicio.split(':')
-                        const finMinutos = Math.min(parseInt(hours) * 60 + parseInt(minutes) + 60, 19 * 60)
+                        const inicioMinutos = parseInt(hours) * 60 + parseInt(minutes)
+                        const finMinutos = Math.min(inicioMinutos + 60, 19 * 60)
+                        if (finMinutos <= inicioMinutos) {
+                          showError('El horario seleccionado no permite calcular una hora de fin válida. Seleccione un horario anterior a las 19:00.')
+                          return
+                        }
                         const horaFinStr = `${Math.floor(finMinutos / 60).toString().padStart(2, '0')}:${(finMinutos % 60).toString().padStart(2, '0')}`
                         setFormProgramacion(prev => ({ ...prev, hora_fin: horaFinStr }))
                       }}

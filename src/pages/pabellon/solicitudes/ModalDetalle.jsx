@@ -1,7 +1,10 @@
-import { X, User, Stethoscope, Package, FileText, Clock, AlertCircle, Link2 } from 'lucide-react'
+import { useState } from 'react'
+import { X, User, Stethoscope, Package, FileText, Clock, AlertCircle, Link2, Download } from 'lucide-react'
 import { format } from 'date-fns'
 import { useTheme } from '../../../contexts/ThemeContext'
 import { codigosOperaciones } from '../../../data/codigosOperaciones'
+import { exportSolicitudPDF } from '../../../utils/exportData'
+import { PREVISION_LABELS, PREVISION_COLORS } from '../../../utils/previsionConfig'
 
 function getEstadoBadge(estado) {
   const estados = {
@@ -14,6 +17,16 @@ function getEstadoBadge(estado) {
 }
 
 export default function ModalDetalle({ solicitud, onClose, generarEnlacePaciente, generandoEnlace, enlaceCopiadoId, scrollYRef }) {
+  const [exportandoPDF, setExportandoPDF] = useState(false)
+
+  const handleExportPDF = async () => {
+    setExportandoPDF(true)
+    try {
+      await exportSolicitudPDF(solicitud)
+    } finally {
+      setExportandoPDF(false)
+    }
+  }
   const { theme } = useTheme()
   if (!solicitud) return null
 
@@ -73,6 +86,16 @@ export default function ModalDetalle({ solicitud, onClose, generarEnlacePaciente
               <div>
                 <p className={`text-xs font-black uppercase tracking-wider mb-1 ${theme === 'dark' ? 'text-slate-400' : 'text-slate-400'}`}>RUT</p>
                 <p className={`text-sm font-bold ${theme === 'dark' ? 'text-white' : 'text-slate-700'}`}>{solicitud.patients?.rut}</p>
+              </div>
+              <div>
+                <p className={`text-xs font-black uppercase tracking-wider mb-1 ${theme === 'dark' ? 'text-slate-400' : 'text-slate-400'}`}>Previsión de Salud</p>
+                {solicitud.patients?.prevision ? (
+                  <span className={`inline-block px-3 py-1 rounded-full text-xs font-bold ${PREVISION_COLORS[solicitud.patients.prevision] || PREVISION_COLORS.otro}`}>
+                    {PREVISION_LABELS[solicitud.patients.prevision] || solicitud.patients.prevision}
+                  </span>
+                ) : (
+                  <p className={`text-sm font-bold ${theme === 'dark' ? 'text-slate-400' : 'text-slate-400'}`}>No especificada</p>
+                )}
               </div>
             </div>
           </div>
@@ -237,14 +260,24 @@ export default function ModalDetalle({ solicitud, onClose, generarEnlacePaciente
         </div>
 
         <div className="mt-6 flex items-center justify-between gap-3 flex-wrap">
-          <button
-            onClick={() => generarEnlacePaciente(solicitud.id)}
-            disabled={generandoEnlace}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold border-2 border-blue-200 text-blue-700 hover:bg-blue-50 transition-colors disabled:opacity-50"
-          >
-            <Link2 className="w-4 h-4" />
-            {enlaceCopiadoId === solicitud.id ? '¡Enlace copiado!' : 'Compartir con paciente'}
-          </button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={() => generarEnlacePaciente(solicitud.id)}
+              disabled={generandoEnlace}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold border-2 border-blue-200 text-blue-700 hover:bg-blue-50 transition-colors disabled:opacity-50"
+            >
+              <Link2 className="w-4 h-4" />
+              {enlaceCopiadoId === solicitud.id ? '¡Enlace copiado!' : 'Compartir con paciente'}
+            </button>
+            <button
+              onClick={handleExportPDF}
+              disabled={exportandoPDF}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold border-2 border-slate-200 text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-50"
+            >
+              <Download className="w-4 h-4" />
+              {exportandoPDF ? 'Generando...' : 'Exportar PDF'}
+            </button>
+          </div>
           <button onClick={handleClose} className="btn-secondary">Cerrar</button>
         </div>
       </div>

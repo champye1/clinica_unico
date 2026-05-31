@@ -31,9 +31,11 @@ export default function RestablecerContraseña() {
     })
 
     // Fallback: si el cliente ya procesó el hash antes del mount (caso síncrono)
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
       if (session) setLinkStatus('valid')
-    })
+    }
+    checkSession()
 
     // Si ningún evento válido llega en 4 segundos, el token expiró
     const timer = setTimeout(() => {
@@ -66,7 +68,11 @@ export default function RestablecerContraseña() {
         setError(updateError.message || 'Error al actualizar la contraseña.')
         return
       }
-      await supabase.auth.signOut()
+      const { error: signOutError } = await supabase.auth.signOut()
+      if (signOutError) {
+        // La contraseña ya fue cambiada — navegar igual aunque falle el cierre de sesión
+        console.warn('signOut tras cambio de contraseña falló:', signOutError.message)
+      }
       navigate('/login/doctor', { replace: true })
     } catch (err) {
       setError(err.message || 'Error inesperado.')

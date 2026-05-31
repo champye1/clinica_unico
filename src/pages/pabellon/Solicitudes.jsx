@@ -8,6 +8,7 @@ import { useNotifications } from '../../hooks/useNotifications'
 import { useDebounce } from '../../hooks/useDebounce'
 import { useTheme } from '../../contexts/ThemeContext'
 import { logger } from '../../utils/logger'
+import { exportToExcel } from '../../utils/exportData'
 import EmptyState from '../../components/common/EmptyState'
 import { TableSkeleton } from '../../components/common/Skeleton'
 
@@ -33,6 +34,7 @@ export default function Solicitudes() {
   const [busqueda, setBusqueda] = useState('')
   const [filtroDoctor, setFiltroDoctor] = useState('todos')
   const [filtroCodigoOperacion, setFiltroCodigoOperacion] = useState('todos')
+  const [filtroPrevision, setFiltroPrevision] = useState('todas')
   const [filtroFechaDesde, setFiltroFechaDesde] = useState('')
   const [filtroFechaHasta, setFiltroFechaHasta] = useState('')
   const debouncedBusqueda = useDebounce(busqueda, 300)
@@ -43,27 +45,18 @@ export default function Solicitudes() {
   const [solicitudAceptandoHorario, setSolicitudAceptandoHorario] = useState(null)
   const [formProgramacion, setFormProgramacion] = useState({ fecha: '', hora_inicio: '', hora_fin: '', operating_room_id: '', observaciones: '' })
 
-  // Modal rechazar
-  const [showConfirmRechazar, setShowConfirmRechazar] = useState(false)
-  const [solicitudARechazar, setSolicitudARechazar] = useState(null)
-  const [motivoRechazo, setMotivoRechazo] = useState('')
+  // null | { solicitud, motivo: '' }
+  const [rechazarModal, setRechazarModal] = useState(null)
+  // null | { solicitud, notas: '' }
+  const [completarModal, setCompletarModal] = useState(null)
+  // null | { solicitud }
+  const [cancelarModal, setCancelarModal] = useState(null)
+  // null | { insumos: [] }
+  const [insumosModal, setInsumosModal] = useState(null)
+  // null | { motivo: '' }
+  const [bulkModal, setBulkModal] = useState(null)
 
-  // Modal completar / cancelar cirugía
-  const [showCompletarModal, setShowCompletarModal] = useState(false)
-  const [solicitudCompletar, setSolicitudCompletar] = useState(null)
-  const [notasCompletacion, setNotasCompletacion] = useState('')
-  const [showCancelarCirugiaModal, setShowCancelarCirugiaModal] = useState(false)
-  const [solicitudCancelar, setSolicitudCancelar] = useState(null)
-
-  // Modal insumos
-  const [showInsumosAlert, setShowInsumosAlert] = useState(false)
-  const [insumosConStockCero, setInsumosConStockCero] = useState([])
-  const [_accionPendienteInsumosOk, setAccionPendienteInsumosOk] = useState(null)
-
-  // Bulk actions
   const [seleccionados, setSeleccionados] = useState(new Set())
-  const [showBulkRechazarModal, setShowBulkRechazarModal] = useState(false)
-  const [motivoBulk, setMotivoBulk] = useState('')
 
   // Enlace paciente
   const [generandoEnlace, setGenerandoEnlace] = useState(false)
@@ -103,7 +96,7 @@ export default function Solicitudes() {
         .select(`
           *,
           doctors:doctor_id(id, user_id, nombre, apellido, especialidad, estado, telefono),
-          patients:patient_id(nombre, apellido, rut, telefono),
+          patients:patient_id(nombre, apellido, rut, telefono, prevision),
           surgery_request_supplies(
             cantidad,
             supplies:supply_id(nombre, codigo, grupo_prestacion, stock_actual, stock_minimo)
@@ -176,6 +169,7 @@ export default function Solicitudes() {
       if (filtroEstado !== 'todas' && s.estado !== filtroEstado) return false
       if (filtroDoctor !== 'todos' && s.doctors?.id !== filtroDoctor) return false
       if (filtroCodigoOperacion !== 'todos' && s.codigo_operacion !== filtroCodigoOperacion) return false
+      if (filtroPrevision !== 'todas' && (s.patients?.prevision || '') !== filtroPrevision) return false
       const fecha = (s.fecha_preferida || s.created_at || '').slice(0, 10)
       if (filtroFechaDesde && fecha < filtroFechaDesde) return false
       if (filtroFechaHasta && fecha > filtroFechaHasta) return false
@@ -189,7 +183,7 @@ export default function Solicitudes() {
       }
       return true
     })
-  }, [solicitudes, filtroEstado, filtroDoctor, filtroCodigoOperacion, filtroFechaDesde, filtroFechaHasta, debouncedBusqueda])
+  }, [solicitudes, filtroEstado, filtroDoctor, filtroCodigoOperacion, filtroPrevision, filtroFechaDesde, filtroFechaHasta, debouncedBusqueda])
 
   const slotsHorarios = useMemo(() => {
     const slots = []
@@ -281,9 +275,7 @@ export default function Solicitudes() {
     },
     onSuccess: ({ solicitud }) => {
       showSuccess('Solicitud rechazada')
-      setShowConfirmRechazar(false)
-      setSolicitudARechazar(null)
-      setMotivoRechazo('')
+      setRechazarModal(null)
       enviarWhatsApp(solicitud, 'rechazada')
     },
     onError: (error, _vars, context) => {
@@ -315,9 +307,7 @@ export default function Solicitudes() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['solicitudes'] })
       queryClient.invalidateQueries({ queryKey: ['cirugias-hoy'] })
-      setShowCompletarModal(false)
-      setSolicitudCompletar(null)
-      setNotasCompletacion('')
+      setCompletarModal(null)
       showSuccess('Cirugía marcada como completada')
     },
     onError: (error) => showError('Error al completar cirugía: ' + (error.message || 'Error desconocido')),
@@ -327,17 +317,30 @@ export default function Solicitudes() {
     mutationFn: async ({ solicitud }) => {
       const cirugia = solicitud.surgeries?.[0]
       if (!cirugia) throw new Error('No se encontró la cirugía asociada')
-      const { error: errS } = await supabase.from('surgeries').update({ deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('id', cirugia.id)
-      if (errS) throw errS
-      const { error: errR } = await supabase.from('surgery_requests').update({ estado: 'pendiente', updated_at: new Date().toISOString() }).eq('id', solicitud.id)
+      // Primero actualizamos la solicitud (menos destructivo)
+      const { error: errR } = await supabase
+        .from('surgery_requests')
+        .update({ estado: 'pendiente', updated_at: new Date().toISOString() })
+        .eq('id', solicitud.id)
       if (errR) throw errR
+      // Luego soft-delete la cirugía; si falla, revertimos la solicitud
+      const { error: errS } = await supabase
+        .from('surgeries')
+        .update({ deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+        .eq('id', cirugia.id)
+      if (errS) {
+        await supabase
+          .from('surgery_requests')
+          .update({ estado: 'aceptada', updated_at: new Date().toISOString() })
+          .eq('id', solicitud.id)
+        throw errS
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['solicitudes'] })
       queryClient.invalidateQueries({ queryKey: ['solicitudes-pendientes'] })
       queryClient.invalidateQueries({ queryKey: ['cirugias-hoy'] })
-      setShowCancelarCirugiaModal(false)
-      setSolicitudCancelar(null)
+      setCancelarModal(null)
       showSuccess('Cirugía cancelada — la solicitud volvió a estado pendiente')
     },
     onError: (error) => showError('Error al cancelar cirugía: ' + (error.message || 'Error desconocido')),
@@ -355,9 +358,8 @@ export default function Solicitudes() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['solicitudes'] })
       queryClient.invalidateQueries({ queryKey: ['solicitudes-pendientes'] })
-      setShowBulkRechazarModal(false)
+      setBulkModal(null)
       setSeleccionados(new Set())
-      setMotivoBulk('')
       showSuccess(`${seleccionados.size} solicitudes rechazadas`)
     },
     onError: (error) => showError('Error al rechazar: ' + (error.message || 'Error desconocido')),
@@ -383,7 +385,11 @@ export default function Solicitudes() {
         .from('surgery_requests')
         .update({ estado: 'aceptada', updated_at: new Date().toISOString() })
         .eq('id', solicitudId)
-      if (requestError) throw requestError
+      if (requestError) {
+        // Rollback: eliminar la cirugía recién creada para evitar registro huérfano
+        await supabase.from('surgeries').delete().eq('id', surgeryData.id)
+        throw requestError
+      }
       return surgeryData
     },
     onSuccess: () => {
@@ -438,11 +444,7 @@ export default function Solicitudes() {
         .select('id')
         .eq('surgery_request_id', solicitudId)
         .is('deleted_at', null)
-      if (oldSurgeries?.length) {
-        await supabase.from('surgeries')
-          .update({ deleted_at: new Date().toISOString() })
-          .in('id', oldSurgeries.map(s => s.id))
-      }
+      // Insertar PRIMERO la nueva cirugía — solo borrar la vieja si el insert tuvo éxito
       const { error: surgeryError } = await supabase.from('surgeries').insert({
         surgery_request_id: solicitudId,
         fecha,
@@ -452,6 +454,11 @@ export default function Solicitudes() {
         estado: 'programada',
       })
       if (surgeryError) throw surgeryError
+      if (oldSurgeries?.length) {
+        await supabase.from('surgeries')
+          .update({ deleted_at: new Date().toISOString() })
+          .in('id', oldSurgeries.map(s => s.id))
+      }
       const { error: notifError } = await supabase.from('notifications').insert({
         user_id: (await supabase.auth.getUser()).data.user?.id,
         tipo: 'operacion_reagendada',
@@ -482,9 +489,7 @@ export default function Solicitudes() {
       .filter(item => item.supplies && item.supplies.stock_actual < item.cantidad)
       .map(item => ({ nombre: item.supplies.nombre, codigo: item.supplies.codigo, stock_actual: item.supplies.stock_actual, requerido: item.cantidad }))
     if (sinStock.length > 0) {
-      setInsumosConStockCero(sinStock)
-      setAccionPendienteInsumosOk(accion)
-      setShowInsumosAlert(true)
+      setInsumosModal({ insumos: sinStock })
       return
     }
     accion()
@@ -585,24 +590,35 @@ export default function Solicitudes() {
   }
 
   const exportarExcel = async () => {
-    const { utils, writeFile } = await import('xlsx')
+    const columns = [
+      { key: 'fecha_solicitud', label: 'Fecha solicitud' },
+      { key: 'paciente', label: 'Paciente' },
+      { key: 'rut_paciente', label: 'RUT Paciente' },
+      { key: 'prevision', label: 'Previsión' },
+      { key: 'doctor', label: 'Doctor' },
+      { key: 'especialidad', label: 'Especialidad' },
+      { key: 'codigo_operacion', label: 'Código operación' },
+      { key: 'estado', label: 'Estado' },
+      { key: 'fecha_preferida', label: 'Fecha preferida' },
+      { key: 'hora_inicio', label: 'Hora inicio' },
+      { key: 'hora_fin', label: 'Hora fin' },
+      { key: 'observaciones', label: 'Observaciones' },
+    ]
     const filas = solicitudesFiltradas.map(s => ({
-      'Fecha solicitud': format(new Date(s.created_at), 'dd/MM/yyyy'),
-      'Paciente': `${s.patients?.nombre || ''} ${s.patients?.apellido || ''}`.trim(),
-      'RUT Paciente': s.patients?.rut || '',
-      'Doctor': `${s.doctors?.nombre || ''} ${s.doctors?.apellido || ''}`.trim(),
-      'Especialidad': s.doctors?.especialidad || '',
-      'Código operación': s.codigo_operacion || '',
-      'Estado': s.estado || '',
-      'Fecha preferida': s.fecha_preferida || '',
-      'Hora inicio': s.hora_recomendada || '',
-      'Hora fin': s.hora_fin_recomendada || '',
-      'Observaciones': s.observaciones || '',
+      fecha_solicitud: s.created_at ? format(new Date(s.created_at), 'dd/MM/yyyy') : '—',
+      paciente: `${s.patients?.nombre || ''} ${s.patients?.apellido || ''}`.trim(),
+      rut_paciente: s.patients?.rut || '',
+      prevision: s.patients?.prevision ? ({ fonasa: 'Fonasa', isapre: 'Isapre', particular: 'Particular', otro: 'Otro' }[s.patients.prevision] || s.patients.prevision) : '',
+      doctor: `${s.doctors?.nombre || ''} ${s.doctors?.apellido || ''}`.trim(),
+      especialidad: s.doctors?.especialidad || '',
+      codigo_operacion: s.codigo_operacion || '',
+      estado: s.estado || '',
+      fecha_preferida: s.fecha_preferida || '',
+      hora_inicio: s.hora_recomendada || '',
+      hora_fin: s.hora_fin_recomendada || '',
+      observaciones: s.observaciones || '',
     }))
-    const ws = utils.json_to_sheet(filas)
-    const wb = utils.book_new()
-    utils.book_append_sheet(wb, ws, 'Solicitudes')
-    writeFile(wb, `solicitudes-${format(new Date(), 'yyyy-MM-dd')}.xlsx`)
+    await exportToExcel(filas, columns, 'solicitudes')
   }
 
   // ─── Render ───────────────────────────────────────────────────────────────
@@ -636,6 +652,7 @@ export default function Solicitudes() {
         filtroEstado={filtroEstado} setFiltroEstado={setFiltroEstado}
         filtroDoctor={filtroDoctor} setFiltroDoctor={setFiltroDoctor}
         filtroCodigoOperacion={filtroCodigoOperacion} setFiltroCodigoOperacion={setFiltroCodigoOperacion}
+        filtroPrevision={filtroPrevision} setFiltroPrevision={setFiltroPrevision}
         filtroFechaDesde={filtroFechaDesde} setFiltroFechaDesde={setFiltroFechaDesde}
         filtroFechaHasta={filtroFechaHasta} setFiltroFechaHasta={setFiltroFechaHasta}
         doctoresUnicos={doctoresUnicos}
@@ -672,7 +689,7 @@ export default function Solicitudes() {
           </div>
           {seleccionados.size > 0 && (
             <button
-              onClick={() => setShowBulkRechazarModal(true)}
+              onClick={() => setBulkModal({ motivo: '' })}
               disabled={rechazarBulk.isPending}
               className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-black text-xs uppercase rounded-xl transition-colors"
             >
@@ -700,12 +717,12 @@ export default function Solicitudes() {
               seleccionados={seleccionados}
               onToggleSeleccion={toggleSeleccion}
               onVerDetalle={(s) => { scrollYRef.current = window.scrollY; setSolicitudDetalle(s) }}
-              onCompletar={(s) => { setSolicitudCompletar(s); setShowCompletarModal(true) }}
-              onCancelarCirugia={(s) => { setSolicitudCancelar(s); setShowCancelarCirugiaModal(true) }}
+              onCompletar={(s) => setCompletarModal({ solicitud: s, notas: '' })}
+              onCancelarCirugia={(s) => setCancelarModal({ solicitud: s })}
               onAceptarHorarioMedico={handleAceptarHorarioMedico}
               onReagendar={handleReagendar}
               onAceptarYProgramar={handleAceptarYProgramar}
-              onRechazar={(s) => { setSolicitudARechazar(s); setShowConfirmRechazar(true) }}
+              onRechazar={(s) => setRechazarModal({ solicitud: s, motivo: '' })}
               tieneHorarioPreferido={tieneHorarioPreferido}
               isAceptandoHorario={programarConHorarioDelMedico.isPending || reagendarConHorarioDelMedico.isPending}
               aceptandoId={solicitudAceptandoHorario?.id}
@@ -748,47 +765,47 @@ export default function Solicitudes() {
       )}
 
       <ModalRechazar
-        isOpen={showConfirmRechazar}
-        onClose={() => { setShowConfirmRechazar(false); setSolicitudARechazar(null) }}
-        solicitud={solicitudARechazar}
-        motivoRechazo={motivoRechazo}
-        setMotivoRechazo={setMotivoRechazo}
-        onConfirmar={() => { if (solicitudARechazar) rechazarSolicitud.mutate({ solicitud: solicitudARechazar, motivo: motivoRechazo }) }}
+        isOpen={!!rechazarModal}
+        onClose={() => setRechazarModal(null)}
+        solicitud={rechazarModal?.solicitud}
+        motivoRechazo={rechazarModal?.motivo ?? ''}
+        setMotivoRechazo={(v) => setRechazarModal(prev => ({ ...prev, motivo: v }))}
+        onConfirmar={() => rechazarModal && rechazarSolicitud.mutate({ solicitud: rechazarModal.solicitud, motivo: rechazarModal.motivo })}
         isPending={rechazarSolicitud.isPending}
       />
 
       <ModalCompletar
-        isOpen={showCompletarModal}
-        onClose={() => { setShowCompletarModal(false); setSolicitudCompletar(null); setNotasCompletacion('') }}
-        solicitud={solicitudCompletar}
-        notas={notasCompletacion}
-        setNotas={setNotasCompletacion}
-        onConfirmar={() => completarCirugia.mutate({ solicitud: solicitudCompletar, notas: notasCompletacion })}
+        isOpen={!!completarModal}
+        onClose={() => setCompletarModal(null)}
+        solicitud={completarModal?.solicitud}
+        notas={completarModal?.notas ?? ''}
+        setNotas={(v) => setCompletarModal(prev => ({ ...prev, notas: v }))}
+        onConfirmar={() => completarModal && completarCirugia.mutate({ solicitud: completarModal.solicitud, notas: completarModal.notas })}
         isPending={completarCirugia.isPending}
       />
 
       <ModalCancelarCirugia
-        isOpen={showCancelarCirugiaModal}
-        onClose={() => { setShowCancelarCirugiaModal(false); setSolicitudCancelar(null) }}
-        solicitud={solicitudCancelar}
-        onConfirmar={() => cancelarCirugiaYa.mutate({ solicitud: solicitudCancelar })}
+        isOpen={!!cancelarModal}
+        onClose={() => setCancelarModal(null)}
+        solicitud={cancelarModal?.solicitud}
+        onConfirmar={() => cancelarModal && cancelarCirugiaYa.mutate({ solicitud: cancelarModal.solicitud })}
         isPending={cancelarCirugiaYa.isPending}
       />
 
       <ModalInsumosAlert
-        isOpen={showInsumosAlert}
-        onClose={() => { setShowInsumosAlert(false); setAccionPendienteInsumosOk(null) }}
-        insumosConStockCero={insumosConStockCero}
+        isOpen={!!insumosModal}
+        onClose={() => setInsumosModal(null)}
+        insumosConStockCero={insumosModal?.insumos ?? []}
       />
 
       <ModalBulkRechazar
-        isOpen={showBulkRechazarModal}
-        onClose={() => { setShowBulkRechazarModal(false); setMotivoBulk('') }}
+        isOpen={!!bulkModal}
+        onClose={() => setBulkModal(null)}
         seleccionados={seleccionados}
         solicitudesFiltradas={solicitudesFiltradas}
-        motivoBulk={motivoBulk}
-        setMotivoBulk={setMotivoBulk}
-        onConfirmar={() => rechazarBulk.mutate({ ids: Array.from(seleccionados), motivo: motivoBulk })}
+        motivoBulk={bulkModal?.motivo ?? ''}
+        setMotivoBulk={(v) => setBulkModal(prev => ({ ...prev, motivo: v }))}
+        onConfirmar={() => bulkModal && rechazarBulk.mutate({ ids: Array.from(seleccionados), motivo: bulkModal.motivo })}
         isPending={rechazarBulk.isPending}
       />
     </div>

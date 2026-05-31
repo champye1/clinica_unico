@@ -1,11 +1,13 @@
-import { useState, useEffect, useMemo } from 'react'
+﻿import { useState, useEffect, useMemo } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../../config/supabase'
-import { Plus, Edit, Trash2, Search, Download, FileSpreadsheet, AlertTriangle, Package, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
+import { Plus, Edit, Trash2, Search, Download, FileSpreadsheet, AlertTriangle, Package, ArrowUpDown, ArrowUp, ArrowDown, FileDown } from 'lucide-react'
 import { useNotifications } from '../../hooks/useNotifications'
 import { useDebounce } from '../../hooks/useDebounce'
 import { exportToCSV, exportToExcel } from '../../utils/exportData'
+import { useClinicInfo } from '../../hooks/useClinicInfo'
+import { exportInventarioInsumos } from '../../utils/pdfExport'
 import { sanitizeString, sanitizeCode } from '../../utils/sanitizeInput'
 import Pagination from '../../components/common/Pagination'
 import ConfirmModal from '../../components/common/ConfirmModal'
@@ -44,6 +46,7 @@ export default function Insumos() {
   const { showSuccess, showError } = useNotifications()
   const debouncedBusqueda = useDebounce(busqueda, 300)
   const { theme } = useTheme()
+  const { data: clinicInfo } = useClinicInfo()
 
   const { data: insumos = [], isLoading } = useQuery({
     queryKey: ['insumos', debouncedBusqueda, filtroTipo],
@@ -125,10 +128,10 @@ export default function Insumos() {
     return sortDir === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />
   }
 
-  // Resetear página cuando cambia la búsqueda
+  // Resetear página cuando cambia cualquier filtro
   useEffect(() => {
     setCurrentPage(1)
-  }, [debouncedBusqueda])
+  }, [debouncedBusqueda, filtroTipo, soloStockBajo])
 
   // Funciones de exportación
   const handleExportCSV = () => {
@@ -172,7 +175,7 @@ export default function Insumos() {
       if (error) throw error
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(['insumos'])
+      queryClient.invalidateQueries({ queryKey: ['insumos'] })
       setMostrarFormulario(false)
       setFormData({ nombre: '', codigo: '', grupo_prestacion: '', proveedor: '', grupos_fonasa: '' })
       setCodigoError('')
@@ -199,7 +202,7 @@ export default function Insumos() {
       if (error) throw error
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(['insumos'])
+      queryClient.invalidateQueries({ queryKey: ['insumos'] })
       setInsumoEditando(null)
       setMostrarFormulario(false)
       setCodigoError('')
@@ -226,7 +229,7 @@ export default function Insumos() {
       if (error) throw error
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(['insumos'])
+      queryClient.invalidateQueries({ queryKey: ['insumos'] })
       showSuccess('Insumo eliminado exitosamente')
     },
     onError: (error) => {
@@ -254,7 +257,7 @@ export default function Insumos() {
       if (error) throw error
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(['insumos'])
+      queryClient.invalidateQueries({ queryKey: ['insumos'] })
       showSuccess('Stock actualizado')
       setShowStockModal(false)
     },
@@ -388,6 +391,15 @@ export default function Insumos() {
               >
                 <FileSpreadsheet className="w-4 h-4" aria-hidden="true" />
                 <span className="hidden sm:inline">Excel</span>
+              </button>
+              <button
+                onClick={() => exportInventarioInsumos(insumos, clinicInfo)}
+                className="btn-secondary flex items-center gap-2 text-sm"
+                title="Exportar inventario a PDF"
+                aria-label="Exportar inventario a PDF"
+              >
+                <FileDown className="w-4 h-4" aria-hidden="true" />
+                <span className="hidden sm:inline">PDF</span>
               </button>
             </>
           )}
@@ -795,7 +807,12 @@ export default function Insumos() {
             <button
               onClick={() => registrarMovimiento.mutate()}
               className="btn-primary"
-              disabled={registrarMovimiento.isPending || !stockForm.cantidad || parseInt(stockForm.cantidad) < 1}
+              disabled={
+                registrarMovimiento.isPending ||
+                !stockForm.cantidad ||
+                parseInt(stockForm.cantidad) < 1 ||
+                (stockForm.tipo === 'salida' && parseInt(stockForm.cantidad) > (insumoStock?.stock_actual ?? 0))
+              }
             >
               {registrarMovimiento.isPending ? (
                 <span className="flex items-center gap-2">

@@ -1,13 +1,15 @@
 import { useState, useMemo } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../../config/supabase'
-import { Users, Search, ChevronDown, ChevronUp, Calendar, FileText, Clock } from 'lucide-react'
+import { Users, Search, ChevronDown, ChevronUp, Calendar, FileText, Clock, Pencil, Check, X } from 'lucide-react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { useTheme } from '../../contexts/ThemeContext'
 import { useDebounce } from '../../hooks/useDebounce'
+import { useNotifications } from '../../hooks/useNotifications'
 import EmptyState from '../../components/common/EmptyState'
 import Pagination from '../../components/common/Pagination'
+import { PREVISION_OPTIONS, PREVISION_LABELS, PREVISION_COLORS } from '../../utils/previsionConfig'
 
 const ITEMS_PER_PAGE = 15
 
@@ -27,9 +29,13 @@ const CIRUGIA_COLORS = {
 export default function Pacientes() {
   const { theme } = useTheme()
   const isDark = theme === 'dark'
+  const { showSuccess, showError } = useNotifications()
+  const queryClient = useQueryClient()
   const [busqueda, setBusqueda] = useState('')
   const [expandedId, setExpandedId] = useState(null)
   const [currentPage, setCurrentPage] = useState(1)
+  const [editandoPrevisionId, setEditandoPrevisionId] = useState(null)
+  const [previsionEdit, setPrevisionEdit] = useState('')
   const debouncedBusqueda = useDebounce(busqueda, 300)
 
   const { data: pacientes = [], isLoading } = useQuery({
@@ -45,7 +51,7 @@ export default function Pacientes() {
       if (!doctor) return []
       const { data, error } = await supabase
         .from('patients')
-        .select('id, nombre, apellido, rut, created_at')
+        .select('id, nombre, apellido, rut, prevision, created_at')
         .eq('doctor_id', doctor.id)
         .is('deleted_at', null)
         .order('apellido', { ascending: true })
@@ -75,6 +81,38 @@ export default function Pacientes() {
     },
     enabled: !!expandedId,
   })
+
+  const actualizarPrevision = useMutation({
+    mutationFn: async ({ pacienteId, prevision }) => {
+      const { error } = await supabase
+        .from('patients')
+        .update({ prevision: prevision || null, updated_at: new Date().toISOString() })
+        .eq('id', pacienteId)
+      if (error) throw error
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['doctor-pacientes'] })
+      showSuccess('Previsión actualizada')
+      setEditandoPrevisionId(null)
+    },
+    onError: () => showError('Error al actualizar la previsión'),
+  })
+
+  const iniciarEdicionPrevision = (e, paciente) => {
+    e.stopPropagation()
+    setEditandoPrevisionId(paciente.id)
+    setPrevisionEdit(paciente.prevision || '')
+  }
+
+  const confirmarEdicionPrevision = (e, pacienteId) => {
+    e.stopPropagation()
+    actualizarPrevision.mutate({ pacienteId, prevision: previsionEdit })
+  }
+
+  const cancelarEdicionPrevision = (e) => {
+    e.stopPropagation()
+    setEditandoPrevisionId(null)
+  }
 
   const pacientesFiltrados = useMemo(() => {
     if (!debouncedBusqueda.trim()) return pacientes
@@ -145,9 +183,16 @@ export default function Pacientes() {
                       {p.nombre?.charAt(0).toUpperCase()}
                     </div>
                     <div>
-                      <p className={`font-bold text-sm ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                        {p.nombre} {p.apellido}
-                      </p>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className={`font-bold text-sm ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                          {p.nombre} {p.apellido}
+                        </p>
+                        {p.prevision && (
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${PREVISION_COLORS[p.prevision] || 'bg-slate-100 text-slate-600'}`}>
+                            {PREVISION_LABELS[p.prevision] || p.prevision}
+                          </span>
+                        )}
+                      </div>
                       <p className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                         {p.rut || 'Sin RUT'} • Registrado {format(new Date(p.created_at), 'd MMM yyyy', { locale: es })}
                       </p>
@@ -158,6 +203,64 @@ export default function Pacientes() {
 
                 {isOpen && (
                   <div className={`px-5 pb-5 space-y-4 border-t ${isDark ? 'border-slate-700' : 'border-slate-100'}`}>
+
+                    {/* Previsión editable */}
+                    <div className="pt-4">
+                      <div className="flex items-center gap-2">
+                        <span className={`text-[10px] font-black uppercase tracking-widest ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Previsión de Salud</span>
+                        {editandoPrevisionId !== p.id && (
+                          <button
+                            onClick={(e) => iniciarEdicionPrevision(e, p)}
+                            className={`p-1 rounded transition-colors ${isDark ? 'hover:bg-slate-700 text-slate-400' : 'hover:bg-slate-100 text-slate-400'}`}
+                            aria-label="Editar previsión"
+                          >
+                            <Pencil size={11} />
+                          </button>
+                        )}
+                      </div>
+
+                      {editandoPrevisionId === p.id ? (
+                        <div className="flex items-center gap-2 mt-1.5" onClick={e => e.stopPropagation()}>
+                          <select
+                            value={previsionEdit}
+                            onChange={e => setPrevisionEdit(e.target.value)}
+                            className={`text-xs font-bold px-2 py-1.5 rounded-lg border ${isDark ? 'bg-slate-700 border-slate-600 text-white' : 'bg-white border-slate-300 text-slate-700'}`}
+                            autoFocus
+                          >
+                            <option value="">Sin previsión</option>
+                            {PREVISION_OPTIONS.map(o => (
+                              <option key={o.value} value={o.value}>{o.label}</option>
+                            ))}
+                          </select>
+                          <button
+                            onClick={(e) => confirmarEdicionPrevision(e, p.id)}
+                            disabled={actualizarPrevision.isPending}
+                            className="p-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
+                            aria-label="Confirmar"
+                          >
+                            <Check size={12} />
+                          </button>
+                          <button
+                            onClick={cancelarEdicionPrevision}
+                            className={`p-1.5 rounded-lg transition-colors ${isDark ? 'hover:bg-slate-700 text-slate-400' : 'hover:bg-slate-100 text-slate-500'}`}
+                            aria-label="Cancelar"
+                          >
+                            <X size={12} />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="mt-1">
+                          {p.prevision ? (
+                            <span className={`inline-block px-2.5 py-1 rounded-lg text-xs font-bold ${PREVISION_COLORS[p.prevision] || 'bg-slate-100 text-slate-600'}`}>
+                              {PREVISION_LABELS[p.prevision] || p.prevision}
+                            </span>
+                          ) : (
+                            <span className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>No especificada</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
                     {/* Cirugías */}
                     <div className="pt-4">
                       <h4 className={`text-[10px] font-black uppercase tracking-widest mb-3 flex items-center gap-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
@@ -176,7 +279,7 @@ export default function Pacientes() {
                                 <div className="flex items-center justify-between">
                                   <div>
                                     <p className={`text-xs font-semibold ${isDark ? 'text-white' : 'text-slate-800'}`}>
-                                      {c.fecha ? format(new Date(c.fecha), 'd MMM yyyy', { locale: es }) : '—'} • {c.hora_inicio?.slice(0, 5)}–{c.hora_fin?.slice(0, 5)}
+                                      {c.fecha ? format(new Date(c.fecha), 'd MMM yyyy', { locale: es }) : '—'} • {c.hora_inicio?.slice(0, 5) || '—'}–{c.hora_fin?.slice(0, 5) || '—'}
                                     </p>
                                     <p className={`text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{c.operating_rooms?.nombre || 'Pabellón'}</p>
                                   </div>

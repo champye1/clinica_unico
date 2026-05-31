@@ -54,7 +54,7 @@ export default defineConfig({
           vendor: ['react', 'react-dom', 'react-router-dom'],
           query: ['@tanstack/react-query'],
           charts: ['recharts'],
-          xlsx: ['xlsx'],
+          exceljs: ['exceljs'],
           sentry: ['@sentry/react'],
           motion: ['framer-motion'],
           'date-fns': ['date-fns'],
@@ -63,7 +63,6 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
-    exclude: ['xlsx'],
     esbuildOptions: {
       target: 'esnext',
     },

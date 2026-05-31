@@ -4,6 +4,7 @@ import { motion } from 'framer-motion'
 import { useTheme } from '../../../contexts/ThemeContext'
 import { codigosOperaciones } from '../../../data/codigosOperaciones'
 import LoadingSpinner from '../../../components/common/LoadingSpinner'
+import { PREVISION_LABELS, PREVISION_COLORS } from '../../../utils/previsionConfig'
 
 function getInitial(nombre) { return nombre?.charAt(0).toUpperCase() || '?' }
 
@@ -85,10 +86,15 @@ export default function SolicitudCard({
             {priorityBadge.text}
           </span>
         </div>
-        <div className={`text-[10px] sm:text-xs font-bold mt-1 uppercase tracking-widest break-words sm:break-normal ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>
+        <div className={`text-[10px] sm:text-xs font-bold mt-1 uppercase tracking-widest break-words sm:break-normal flex flex-wrap items-center gap-x-2 gap-y-1 ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>
           {procedureName} • <span className={theme === 'dark' ? 'text-blue-400' : 'text-blue-600'}>
-            Dr. {solicitud.doctors?.apellido || solicitud.doctors?.nombre}
+            Dr. {solicitud.doctors?.apellido || solicitud.doctors?.nombre || 'N/A'}
           </span>
+          {solicitud.patients?.prevision && (
+            <span className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-widest ${PREVISION_COLORS[solicitud.patients.prevision] || 'bg-slate-100 text-slate-600'}`}>
+              {PREVISION_LABELS[solicitud.patients.prevision] || solicitud.patients.prevision}
+            </span>
+          )}
         </div>
         {solicitud.reagendamiento_notificado_at && (
           <div className={`mt-2 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-2 w-fit ${

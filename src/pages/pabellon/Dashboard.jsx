@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react'
+﻿import { useState, useMemo, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../config/supabase'
@@ -32,6 +32,7 @@ import Modal from '../../components/common/Modal'
 import { useTheme } from '../../contexts/ThemeContext'
 import { sanitizeString } from '../../utils/sanitizeInput'
 import { logger } from '../../utils/logger'
+import { STORAGE_KEYS } from '../../utils/storageKeys'
 
 export default function Dashboard() {
   const { theme } = useTheme()
@@ -40,6 +41,7 @@ export default function Dashboard() {
   const [filtroTipoOcupacion, setFiltroTipoOcupacion] = useState('porcentaje') // porcentaje | horas_ocupadas | horas_libres
   const [filtroPabellon, setFiltroPabellon] = useState('todos') // todos | id de pabellón
   const [showCirugiasHoyModal, setShowCirugiasHoyModal] = useState(false)
+  const [marcarOrdenesLoading, setMarcarOrdenesLoading] = useState(false)
   const [expandedCirugiaHoyId, setExpandedCirugiaHoyId] = useState(null)
   // Solicitudes pendientes
   const { data: solicitudesPendientes = [], isLoading: isLoadingSolicitudes } = useQuery({
@@ -83,15 +85,23 @@ export default function Dashboard() {
   })
 
   const marcarOrdenesVistas = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user || ordenesNotificaciones.length === 0) return
-    await supabase
-      .from('notifications')
-      .update({ vista: true })
-      .eq('user_id', user.id)
-      .eq('tipo', 'orden_sin_agendar')
-      .eq('vista', false)
-    refetchOrdenes()
+    if (marcarOrdenesLoading || ordenesNotificaciones.length === 0) return
+    setMarcarOrdenesLoading(true)
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      await supabase
+        .from('notifications')
+        .update({ vista: true })
+        .eq('user_id', user.id)
+        .eq('tipo', 'orden_sin_agendar')
+        .eq('vista', false)
+      refetchOrdenes()
+    } catch (e) {
+      logger.error('Error al marcar órdenes como vistas:', e)
+    } finally {
+      setMarcarOrdenesLoading(false)
+    }
   }
 
   // Cirugías de hoy
@@ -308,7 +318,7 @@ export default function Dashboard() {
   // Inicializar desde localStorage si existe
   const [nuevoRecordatorio, setNuevoRecordatorio] = useState(() => {
     try {
-      const guardado = localStorage.getItem('recordatorio-temporal')
+      const guardado = localStorage.getItem(STORAGE_KEYS.RECORDATORIO_TEMPORAL)
       if (guardado) {
         return JSON.parse(guardado)
       }
@@ -322,9 +332,9 @@ export default function Dashboard() {
   // Guardar en localStorage cada vez que cambia el contenido
   useEffect(() => {
     if (nuevoRecordatorio.contenido.trim()) {
-      localStorage.setItem('recordatorio-temporal', JSON.stringify(nuevoRecordatorio))
+      localStorage.setItem(STORAGE_KEYS.RECORDATORIO_TEMPORAL, JSON.stringify(nuevoRecordatorio))
     } else {
-      localStorage.removeItem('recordatorio-temporal')
+      localStorage.removeItem(STORAGE_KEYS.RECORDATORIO_TEMPORAL)
     }
   }, [nuevoRecordatorio])
 
@@ -345,10 +355,10 @@ export default function Dashboard() {
       if (error) throw error
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(['recordatorios-pabellon'])
+      queryClient.invalidateQueries({ queryKey: ['recordatorios-pabellon'] })
       setNuevoRecordatorio({ titulo: '', contenido: '' })
       // Limpiar localStorage después de crear exitosamente
-      localStorage.removeItem('recordatorio-temporal')
+      localStorage.removeItem(STORAGE_KEYS.RECORDATORIO_TEMPORAL)
       showSuccess('Recordatorio creado exitosamente')
     },
     onError: (error) => {
@@ -371,7 +381,7 @@ export default function Dashboard() {
       if (error) throw error
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(['recordatorios-pabellon'])
+      queryClient.invalidateQueries({ queryKey: ['recordatorios-pabellon'] })
       showSuccess('Recordatorio marcado como realizado')
     },
     onError: (error) => {
@@ -394,7 +404,7 @@ export default function Dashboard() {
       if (error) throw error
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(['recordatorios-pabellon'])
+      queryClient.invalidateQueries({ queryKey: ['recordatorios-pabellon'] })
       showSuccess('Recordatorio eliminado')
     },
     onError: (error) => {
@@ -529,13 +539,15 @@ export default function Dashboard() {
           <div className="flex flex-col sm:flex-row gap-2 flex-shrink-0 w-full sm:w-auto">
             <button
               onClick={() => { marcarOrdenesVistas(); navigate('/pabellon/solicitudes') }}
-              className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white font-black text-xs uppercase rounded-xl transition-colors touch-manipulation w-full sm:w-auto"
+              disabled={marcarOrdenesLoading}
+              className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white font-black text-xs uppercase rounded-xl transition-colors touch-manipulation w-full sm:w-auto disabled:opacity-60"
             >
               Ver solicitudes
             </button>
             <button
               onClick={marcarOrdenesVistas}
-              className={`px-3 py-2 font-black text-xs uppercase rounded-xl transition-colors touch-manipulation w-full sm:w-auto ${
+              disabled={marcarOrdenesLoading}
+              className={`px-3 py-2 font-black text-xs uppercase rounded-xl transition-colors touch-manipulation w-full sm:w-auto disabled:opacity-60 ${
                 theme === 'dark'
                   ? 'bg-orange-900/50 hover:bg-orange-900 text-orange-300'
                   : 'bg-orange-100 hover:bg-orange-200 text-orange-700'
@@ -915,7 +927,7 @@ export default function Dashboard() {
                       }`}
                     >
                       <span className="truncate">{recordatorio.titulo}</span>
-                      <span className="ml-2 flex-shrink-0">{format(new Date(recordatorio.created_at), 'dd/MM HH:mm')}</span>
+                      <span className="ml-2 flex-shrink-0">{recordatorio.created_at ? format(new Date(recordatorio.created_at), 'dd/MM HH:mm') : '—'}</span>
                     </div>
                     <div className="flex items-center gap-1">
                       {!recordatorio.visto && (

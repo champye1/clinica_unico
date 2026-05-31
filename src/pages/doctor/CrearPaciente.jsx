@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from 'react'
+﻿import { useState, useMemo, useEffect, useRef } from 'react'
 import { useLocation, useNavigate, useBlocker } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../../config/supabase'
@@ -21,6 +21,7 @@ export default function CrearPaciente() {
     apellido: '',
     rut: '',
     telefono: '',
+    prevision: '',
     codigo_operacion: '',
     hora_recomendada: '',
     hora_fin_recomendada: '',
@@ -181,12 +182,17 @@ export default function CrearPaciente() {
       return
     }
     if (!packData?.packItems || lastAppliedPackCodeRef.current === formData.codigo_operacion) return
+    // Si el médico agregó insumos manualmente antes de elegir código, no sobreescribir
+    if (lastAppliedPackCodeRef.current === null && formData.insumos.length > 0) {
+      lastAppliedPackCodeRef.current = formData.codigo_operacion
+      return
+    }
     const packInsumos = packData.packItems
       .filter(p => p.cantidad >= 1)
       .map(p => ({ supply_id: p.supply_id, nombre: p.nombre, codigo: p.codigo, cantidad: p.cantidad }))
     lastAppliedPackCodeRef.current = formData.codigo_operacion
     setFormData(prev => ({ ...prev, insumos: packInsumos }))
-  }, [formData.codigo_operacion, packData?.packItems])
+  }, [formData.codigo_operacion, formData.insumos.length, packData?.packItems])
 
   const grupoFonasa = getGrupoFonasaByCodigo(formData.codigo_operacion)
   const insumosDisponibles = useMemo(() => {
@@ -219,7 +225,7 @@ export default function CrearPaciente() {
     try {
       const { data } = await supabase
         .from('patients')
-        .select('id, nombre, apellido, telefono')
+        .select('id, nombre, apellido, telefono, prevision')
         .eq('doctor_id', doctor.id)
         .eq('rut', cleanRut(rut))
         .is('deleted_at', null)
@@ -231,6 +237,7 @@ export default function CrearPaciente() {
           nombre: data.nombre,
           apellido: data.apellido,
           telefono: data.telefono || prev.telefono,
+          prevision: data.prevision || prev.prevision,
         }))
         const [histRes] = await Promise.all([
           supabase
@@ -273,13 +280,14 @@ export default function CrearPaciente() {
       let paciente
       if (pacienteExistente) {
         paciente = pacienteExistente
-        if (pacienteExistente.nombre !== data.nombre || pacienteExistente.apellido !== data.apellido || data.telefono) {
+        if (pacienteExistente.nombre !== data.nombre || pacienteExistente.apellido !== data.apellido || data.telefono || data.prevision) {
           const { error: updateError } = await supabase
             .from('patients')
             .update({
               nombre: data.nombre,
               apellido: data.apellido,
               ...(data.telefono ? { telefono: data.telefono } : {}),
+              ...(data.prevision ? { prevision: data.prevision } : {}),
               updated_at: new Date().toISOString()
             })
             .eq('id', pacienteExistente.id)
@@ -295,6 +303,7 @@ export default function CrearPaciente() {
             apellido: data.apellido,
             rut: cleanRut(data.rut),
             ...(data.telefono ? { telefono: data.telefono } : {}),
+            ...(data.prevision ? { prevision: data.prevision } : {}),
           })
           .select()
           .single()
@@ -365,12 +374,12 @@ export default function CrearPaciente() {
       return { paciente, solicitud }
     },
     onSuccess: (data, variables) => {
-      queryClient.invalidateQueries(['solicitudes-doctor-pendientes'])
+      queryClient.invalidateQueries({ queryKey: ['solicitudes-doctor-pendientes'] })
       queryClient.invalidateQueries({ queryKey: ['estado-slots-pabellon'] })
-      queryClient.invalidateQueries(['solicitudes'])
-      queryClient.invalidateQueries(['solicitudes-pendientes'])
+      queryClient.invalidateQueries({ queryKey: ['solicitudes'] })
+      queryClient.invalidateQueries({ queryKey: ['solicitudes-pendientes'] })
       setFormData({
-        nombre: '', apellido: '', rut: '', telefono: '', codigo_operacion: '',
+        nombre: '', apellido: '', rut: '', telefono: '', prevision: '', codigo_operacion: '',
         hora_recomendada: '', hora_fin_recomendada: '', fecha_preferida: '', operating_room_id_preferido: '',
         hora_recomendada_2: '', hora_fin_recomendada_2: '', fecha_preferida_2: '', operating_room_id_preferido_2: '',
         dejar_fecha_a_pabellon: true, horarios_extra: [], observaciones: '', insumos: [],

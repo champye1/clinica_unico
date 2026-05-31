@@ -155,10 +155,12 @@ export default function SearchableSelect({
       {required && !value && (
         <input
           type="text"
-          className="hidden"
+          style={{ opacity: 0, width: 0, height: 0, position: 'absolute', pointerEvents: 'none' }}
           required
-          value={value}
+          value=""
           onChange={() => {}}
+          tabIndex={-1}
+          aria-hidden="true"
         />
       )}
     </div>

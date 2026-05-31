@@ -15,7 +15,7 @@ export default function DayView({ day, pabellones, cirugias, bloqueos, onSlotSel
   const resizeHandleRef = useRef(null)
   const resizeCleanupRef = useRef(null)
 
-  const esDiaPasado = isPast(startOfDay(day)) && !isSameDay(day, new Date())
+  const esDiaPasado = day ? isPast(startOfDay(day)) && !isSameDay(day, new Date()) : false
 
   useEffect(() => {
     const interval = setInterval(() => {

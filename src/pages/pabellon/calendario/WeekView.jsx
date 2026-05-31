@@ -15,11 +15,13 @@ export default function WeekView({ weekStart, cirugias, pabellonId, onDayClick, 
       return c.fecha === dayStr
     })
     const minutosOcupados = cirugiasDia.reduce((acc, curr) => {
+      if (!curr.hora_inicio || !curr.hora_fin) return acc
       const [h1, m1] = curr.hora_inicio.split(':').map(Number)
       const [h2, m2] = curr.hora_fin.split(':').map(Number)
       return acc + (h2 * 60 + m2) - (h1 * 60 + m1)
     }, 0)
     const totalMinutos = pabellones.length * 12 * 60
+    if (!totalMinutos) return 0
     return Math.min(100, Math.round((minutosOcupados / totalMinutos) * 100))
   }
 

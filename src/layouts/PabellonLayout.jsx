@@ -1,11 +1,12 @@
-import { lazy } from 'react'
+import { lazy, useState } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import {
-  Home, FileText, Calendar, Clock, Users, Package, Mail, FileSearch, User, Settings, BarChart2, MessageSquare,
+  Home, FileText, Calendar, Clock, Users, Package, Mail, FileSearch, User, Settings, BarChart2, MessageSquare, HelpCircle,
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '../config/supabase'
 import BaseLayout from './BaseLayout'
+import OnboardingWizard from '../components/onboarding/OnboardingWizard'
 
 const Dashboard     = lazy(() => import('../pages/pabellon/Dashboard'))
 const Solicitudes   = lazy(() => import('../pages/pabellon/Solicitudes'))
@@ -19,6 +20,7 @@ const ChatPabellon    = lazy(() => import('../pages/pabellon/Chat'))
 const Correos         = lazy(() => import('../pages/pabellon/Correos'))
 const Configuracion   = lazy(() => import('../pages/pabellon/Configuracion'))
 const Perfil          = lazy(() => import('../pages/Perfil'))
+const Ayuda           = lazy(() => import('../pages/pabellon/Ayuda'))
 
 const MENU = [
   { path: '/pabellon',           icon: Home,       label: 'Inicio' },
@@ -31,11 +33,32 @@ const MENU = [
   { path: '/pabellon/chat',         icon: MessageSquare,  label: 'Chat Médicos' },
   { path: '/pabellon/correos',      icon: Mail,           label: 'Correos', badge: true },
   { path: '/pabellon/auditoria',      icon: FileSearch, label: 'Auditoría' },
-  { path: '/pabellon/configuracion', icon: Settings,   label: 'Configuración' },
-  { path: '/pabellon/perfil',        icon: User,       label: 'Mi Perfil' },
+  { path: '/pabellon/configuracion', icon: Settings,    label: 'Configuración' },
+  { path: '/pabellon/ayuda',         icon: HelpCircle, label: 'Ayuda' },
+  { path: '/pabellon/perfil',        icon: User,        label: 'Mi Perfil' },
 ]
 
 export default function PabellonLayout() {
+  const [onboardingDone, setOnboardingDone] = useState(
+    () => !!localStorage.getItem('onboarding_completed')
+  )
+
+  // Detectar si es primera vez: sin pabellones configurados
+  const { data: tienePabellones, isLoading: checkingPabellones } = useQuery({
+    queryKey: ['check-pabellones-count'],
+    queryFn: async () => {
+      const { count } = await supabase
+        .from('operating_rooms')
+        .select('*', { count: 'exact', head: true })
+        .eq('activo', true)
+      return (count ?? 0) > 0
+    },
+    enabled: !onboardingDone,
+    staleTime: Infinity,
+  })
+
+  const showWizard = !onboardingDone && !checkingPabellones && tienePabellones === false
+
   // Badge: correos externos no leídos
   const { data: correosNoLeidos = 0 } = useQuery({
     queryKey: ['external-messages-unread'],
@@ -69,6 +92,7 @@ export default function PabellonLayout() {
       badgeCounts={{ '/pabellon/correos': correosNoLeidos }}
       onNotificationClick={handleNotificationClick}
     >
+      {showWizard && <OnboardingWizard onComplete={() => setOnboardingDone(true)} />}
       <Routes>
         <Route path="/"           element={<Dashboard />} />
         <Route path="/solicitudes" element={<Solicitudes />} />
@@ -81,6 +105,7 @@ export default function PabellonLayout() {
         <Route path="/correos"        element={<Correos />} />
         <Route path="/auditoria"      element={<Auditoria />} />
         <Route path="/configuracion"  element={<Configuracion />} />
+        <Route path="/ayuda"          element={<Ayuda />} />
         <Route path="/perfil"         element={<Perfil />} />
         <Route path="*"            element={<Navigate to="/pabellon" />} />
       </Routes>

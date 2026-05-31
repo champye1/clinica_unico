@@ -144,7 +144,7 @@ export default function Dashboard() {
         .is('deleted_at', null)
         .order('fecha', { ascending: true })
         .order('hora_inicio', { ascending: true })
-      if (error) return []
+      if (error) throw error
       return data || []
     },
     enabled: !!doctor,
@@ -211,7 +211,7 @@ export default function Dashboard() {
         .gte('created_at', inicio)
         .lte('created_at', fin + 'T23:59:59')
         .is('deleted_at', null)
-      if (error) return []
+      if (error) throw error
       return data || []
     },
     enabled: !!doctor,

@@ -1,7 +1,10 @@
-import { lazy } from 'react'
+import { lazy, useState } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { LayoutDashboard, UserPlus, FileText, Calendar, LayoutGrid, User, Users, CalendarClock, MessageSquare } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
+import { supabase } from '../config/supabase'
 import BaseLayout from './BaseLayout'
+import OnboardingMedico from '../components/onboarding/OnboardingMedico'
 
 const Dashboard           = lazy(() => import('../pages/doctor/Dashboard'))
 const CrearPaciente       = lazy(() => import('../pages/doctor/CrearPaciente'))
@@ -34,12 +37,36 @@ const handleNotificationClick = (n, navigate) => {
 }
 
 export default function DoctorLayout() {
+  const [onboardingDone, setOnboardingDone] = useState(
+    () => !!localStorage.getItem('onboarding_medico_completed')
+  )
+
+  const { data: doctorInfo, isLoading: loadingDoctor } = useQuery({
+    queryKey: ['doctor-layout-info'],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return null
+      const { data } = await supabase.from('doctors').select('nombre, apellido').eq('user_id', user.id).maybeSingle()
+      return data
+    },
+    enabled: !onboardingDone,
+    staleTime: Infinity,
+  })
+
+  const showWizard = !onboardingDone && !loadingDoctor && doctorInfo !== undefined
+
   return (
     <BaseLayout
       menuItems={MENU}
       portalLabel="Panel Médico"
       onNotificationClick={handleNotificationClick}
     >
+      {showWizard && (
+        <OnboardingMedico
+          doctorNombre={doctorInfo?.nombre}
+          onComplete={() => setOnboardingDone(true)}
+        />
+      )}
       <Routes>
         <Route path="/"            element={<Dashboard />} />
         <Route path="/paciente"    element={<CrearPaciente />} />

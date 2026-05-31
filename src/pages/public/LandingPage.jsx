@@ -1,45 +1,46 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  Calendar, Users, Package, Bell, CheckCircle,
-  ArrowRight, Shield, Clock, ChevronRight, Mail,
-  Stethoscope, ClipboardList, BarChart3, Zap
+  Calendar, Users, Package, Bell, CheckCircle, ArrowRight, Shield,
+  Clock, ChevronRight, Mail, Stethoscope, ClipboardList, BarChart3,
+  Zap, X, ChevronDown, ChevronUp, FileText, MessageSquare, Star,
 } from 'lucide-react'
 
 const FEATURES = [
   {
     icon: Calendar,
     title: 'Agenda quirúrgica',
-    description: 'Calendario visual por pabellón. Programa cirugías, detecta solapamientos y gestiona bloqueos de horario en tiempo real.',
+    description: 'Calendario visual por pabellón con vistas diaria, semanal y anual. Detecta solapamientos y gestiona bloqueos en tiempo real.',
     color: 'bg-blue-50 text-blue-600',
   },
   {
     icon: Users,
     title: 'Portal del médico',
-    description: 'Cada dentista tiene su propio acceso para solicitar procedimientos, ver el estado de sus cirugías y recibir notificaciones.',
+    description: 'Cada cirujano tiene su propio acceso para solicitar procedimientos, ver el estado de sus cirugías y recibir notificaciones al instante.',
     color: 'bg-indigo-50 text-indigo-600',
   },
   {
     icon: Package,
     title: 'Control de insumos',
-    description: 'Stock en tiempo real con alertas de stock mínimo. Descuento automático de materiales al programar cada procedimiento.',
+    description: 'Stock en tiempo real con alertas de mínimo. Registro de movimientos de entrada y salida. Exportación a Excel y PDF.',
     color: 'bg-emerald-50 text-emerald-600',
   },
   {
     icon: Bell,
-    title: 'Notificaciones',
-    description: 'El médico recibe confirmación automática al aceptar su cirugía. Sin llamadas, sin WhatsApp manual.',
+    title: 'Notificaciones automáticas',
+    description: 'El médico recibe confirmación al aceptar su cirugía vía WhatsApp o email. Sin llamadas, sin mensajes manuales.',
     color: 'bg-amber-50 text-amber-600',
   },
   {
     icon: ClipboardList,
     title: 'Auditoría completa',
-    description: 'Registro de cada acción: quién programó, cuándo y qué cambió. Trazabilidad total para cumplimiento normativo.',
+    description: 'Registro de cada acción: quién programó, cuándo y qué cambió. Trazabilidad total para cumplimiento normativo MINSAL.',
     color: 'bg-rose-50 text-rose-600',
   },
   {
     icon: BarChart3,
-    title: 'Dashboard en tiempo real',
-    description: 'Vista ejecutiva de cirugías del día, ocupación de pabellones y solicitudes pendientes al abrir el sistema.',
+    title: 'Reportes y estadísticas',
+    description: 'Dashboard ejecutivo en tiempo real. Exporta reportes de cirugías, ocupación de pabellones e inventario en PDF con tu logo.',
     color: 'bg-violet-50 text-violet-600',
   },
 ]
@@ -48,26 +49,104 @@ const STEPS = [
   {
     number: '01',
     title: 'El médico solicita',
-    description: 'El dentista ingresa a su portal y crea una solicitud de cirugía con el procedimiento, paciente y horario preferido.',
+    description: 'El cirujano ingresa a su portal y crea una solicitud con el procedimiento, paciente, insumos requeridos y horario preferido.',
   },
   {
     number: '02',
     title: 'Pabellón programa',
-    description: 'El equipo de pabellón revisa la solicitud, asigna el pabellón disponible y confirma la fecha en el calendario.',
+    description: 'El equipo de pabellón revisa la solicitud, verifica disponibilidad de sala e insumos, y confirma la fecha en el calendario.',
   },
   {
     number: '03',
     title: 'Todos quedan informados',
-    description: 'El sistema notifica automáticamente al médico. Los insumos se descuentan del stock. Sin papel, sin teléfonos.',
+    description: 'El sistema notifica automáticamente al médico. El stock se actualiza. Sin papel, sin planillas, sin llamadas.',
   },
 ]
 
-const BENEFITS = [
-  'Sin instalación — funciona desde cualquier navegador',
-  'Datos seguros con cifrado y respaldo automático',
-  'Soporte incluido en el primer mes',
-  'Adaptado a la normativa chilena',
+const COMPARISON = [
+  { feature: 'Agenda en tiempo real',          pro: true,  excel: false, whatsapp: false },
+  { feature: 'Portal propio por médico',        pro: true,  excel: false, whatsapp: false },
+  { feature: 'Detección de solapamientos',      pro: true,  excel: false, whatsapp: false },
+  { feature: 'Control de stock de insumos',     pro: true,  excel: true,  whatsapp: false },
+  { feature: 'Notificaciones automáticas',      pro: true,  excel: false, whatsapp: true  },
+  { feature: 'Auditoría y trazabilidad',        pro: true,  excel: false, whatsapp: false },
+  { feature: 'Reportes PDF con logo clínica',   pro: true,  excel: false, whatsapp: false },
+  { feature: 'Acceso desde cualquier dispositivo', pro: true, excel: true, whatsapp: true },
+  { feature: 'Datos seguros y respaldados',     pro: true,  excel: false, whatsapp: false },
 ]
+
+const TESTIMONIALS = [
+  {
+    name: 'Dr. A.M.',
+    role: 'Director Médico',
+    clinic: 'Clínica quirúrgica, Región de Valparaíso',
+    text: 'Antes coordinábamos todo por WhatsApp. Hoy cada médico ve su agenda en tiempo real y el pabellón no pierde tiempo en llamadas. El cambio fue inmediato.',
+    stars: 5,
+  },
+  {
+    name: 'P.F.',
+    role: 'Jefa de Pabellón',
+    clinic: 'Centro quirúrgico privado, Región Metropolitana',
+    text: 'La importación masiva de médicos nos ahorró días de trabajo al inicio. El wizard de configuración fue muy intuitivo para todo el equipo.',
+    stars: 5,
+  },
+  {
+    name: 'Dr. R.A.',
+    role: 'Cirujano General',
+    clinic: 'Clínica privada, Santiago',
+    text: 'Por fin tengo visibilidad de mis cirugías desde el celular. Las notificaciones automáticas son un diferenciador enorme para los pacientes.',
+    stars: 5,
+  },
+]
+
+const FAQS = [
+  {
+    q: '¿Cuánto tiempo toma instalar el sistema?',
+    a: 'La instalación base se realiza en 1-2 horas. Incluye la configuración de la base de datos, pabellones, y primer usuario administrador. Para clínicas con muchos médicos, la importación masiva vía CSV reduce el tiempo de carga de datos a minutos.',
+  },
+  {
+    q: '¿El sistema funciona en celulares?',
+    a: 'Sí. QuirúrgicaPro es una aplicación web progresiva (PWA) que funciona en cualquier navegador, incluyendo Safari en iPhone y Chrome en Android. Los médicos pueden instalarla como app en su celular desde el navegador, sin tienda de aplicaciones.',
+  },
+  {
+    q: '¿Qué pasa con mis datos si dejo de usar el sistema?',
+    a: 'Los datos son tuyos. Puedes exportar toda la información en cualquier momento (Excel, CSV, PDF). El sistema incluye funciones de exportación masiva para pacientes, cirugías e insumos. No hay lock-in.',
+  },
+  {
+    q: '¿Es seguro guardar datos de pacientes en la nube?',
+    a: 'Sí. Usamos Supabase como base de datos, que cumple con SOC 2, ISO 27001 y GDPR. Los datos se cifran en tránsito y en reposo. El sistema es compatible con la Ley N° 19.628 de Chile sobre protección de datos personales.',
+  },
+  {
+    q: '¿Puede tener múltiples pabellones y médicos?',
+    a: 'Sí, sin límite de usuarios. Puedes configurar hasta 8 pabellones en la interfaz estándar. Para más pabellones o configuraciones especiales, contáctanos.',
+  },
+  {
+    q: '¿Qué incluye el soporte?',
+    a: 'El Plan Clínica incluye 1 mes de soporte por correo con respuesta en 4 horas hábiles. El Plan Clínica + Soporte incluye 6 meses de soporte prioritario, 2 sesiones de capacitación y actualizaciones por 1 año.',
+  },
+]
+
+function FaqItem({ q, a }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="border border-slate-200 rounded-2xl overflow-hidden">
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center justify-between px-6 py-4 text-left text-sm font-bold text-slate-900 hover:bg-slate-50 transition-colors"
+      >
+        {q}
+        {open ? <ChevronUp className="w-4 h-4 flex-shrink-0 text-blue-500" /> : <ChevronDown className="w-4 h-4 flex-shrink-0 text-slate-400" />}
+      </button>
+      {open && (
+        <div className="px-6 pb-5 text-sm text-slate-600 leading-relaxed border-t border-slate-100 pt-4">
+          {a}
+        </div>
+      )}
+    </div>
+  )
+}
+
+const YEAR = new Date().getFullYear()
 
 export default function LandingPage() {
   return (
@@ -83,11 +162,17 @@ export default function LandingPage() {
             <span className="text-lg font-black text-slate-900 tracking-tight">QuirúrgicaPro</span>
           </div>
           <div className="flex items-center gap-3">
+            <a href="#precios" className="text-sm font-semibold text-slate-600 hover:text-slate-900 transition-colors hidden sm:block">
+              Precios
+            </a>
+            <Link to="/contacto" className="text-sm font-semibold text-slate-600 hover:text-slate-900 transition-colors hidden sm:block">
+              Contacto
+            </Link>
             <Link
               to="/contacto"
-              className="text-sm font-semibold text-slate-600 hover:text-slate-900 transition-colors hidden sm:block"
+              className="hidden sm:inline-flex items-center gap-1 border border-blue-200 text-blue-700 text-sm font-bold px-4 py-2 rounded-lg hover:bg-blue-50 transition-colors"
             >
-              Contacto
+              Demo gratuita
             </Link>
             <Link
               to="/acceso"
@@ -103,7 +188,7 @@ export default function LandingPage() {
       <section className="pt-32 pb-20 px-4 sm:px-6 bg-gradient-to-b from-slate-950 to-slate-800">
         <div className="max-w-4xl mx-auto text-center">
           <span className="inline-block bg-blue-500/20 text-blue-300 text-xs font-bold uppercase tracking-widest px-3 py-1 rounded-full mb-6">
-            Software para clínicas dentales · Chile
+            Software para clínicas quirúrgicas · Chile
           </span>
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black text-white leading-tight mb-6">
             Gestión quirúrgica sin
@@ -112,37 +197,42 @@ export default function LandingPage() {
           </h1>
           <p className="text-lg sm:text-xl text-slate-300 max-w-2xl mx-auto mb-10 leading-relaxed">
             QuirúrgicaPro centraliza las solicitudes de cirugía, el calendario de pabellón
-            y el inventario de insumos. Diseñado para clínicas dentales en Chile.
+            y el control de insumos. Pensado para clínicas quirúrgicas privadas en Chile.
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <Link
-              to="/acceso"
+              to="/contacto"
               className="inline-flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 text-white font-bold px-8 py-4 rounded-xl text-base transition-all shadow-lg shadow-blue-500/20"
             >
-              Ver demo en vivo
+              Solicitar demo gratuita
               <ArrowRight className="w-4 h-4" aria-hidden="true" />
             </Link>
             <Link
-              to="/contacto"
+              to="/acceso"
               className="inline-flex items-center justify-center gap-2 bg-white/10 hover:bg-white/20 text-white font-bold px-8 py-4 rounded-xl text-base transition-all border border-white/20"
             >
-              Solicitar información
+              Ver demo ahora
             </Link>
           </div>
           <p className="text-slate-500 text-sm mt-6">
-            Demo disponible con datos reales · Sin tarjeta de crédito
+            Demo disponible · Sin tarjeta de crédito · Instalación en 1 día
           </p>
         </div>
       </section>
 
-      {/* ── BENEFICIOS RÁPIDOS ── */}
-      <section className="py-8 bg-blue-600">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6">
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            {BENEFITS.map((b) => (
-              <div key={b} className="flex items-center gap-2 text-white text-sm font-medium">
-                <CheckCircle className="w-4 h-4 flex-shrink-0 text-blue-200" aria-hidden="true" />
-                {b}
+      {/* ── STATS ── */}
+      <section className="py-12 bg-blue-600">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-6 text-center text-white">
+            {[
+              { value: '< 1 día', label: 'Instalación completa' },
+              { value: '100%', label: 'Web — sin instalar nada' },
+              { value: '0 papel', label: 'Solicitudes digitales' },
+              { value: '24/7', label: 'Acceso desde cualquier lugar' },
+            ].map(s => (
+              <div key={s.label}>
+                <div className="text-3xl font-black mb-1">{s.value}</div>
+                <div className="text-blue-200 text-xs font-bold uppercase tracking-wide">{s.label}</div>
               </div>
             ))}
           </div>
@@ -157,15 +247,12 @@ export default function LandingPage() {
               Todo lo que necesita tu clínica, en un solo lugar
             </h2>
             <p className="text-slate-500 text-lg max-w-xl mx-auto">
-              Sin integraciones complejas. Sin capacitación de meses. Listo para operar desde el primer día.
+              Sin integraciones complejas. Sin capacitación de meses. Operativo desde el primer día.
             </p>
           </div>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {FEATURES.map((f) => (
-              <div
-                key={f.title}
-                className="p-6 rounded-2xl border border-slate-100 hover:border-slate-200 hover:shadow-md transition-all"
-              >
+              <div key={f.title} className="p-6 rounded-2xl border border-slate-100 hover:border-blue-200 hover:shadow-md transition-all group">
                 <div className={`w-11 h-11 rounded-xl flex items-center justify-center mb-4 ${f.color}`}>
                   <f.icon className="w-5 h-5" aria-hidden="true" />
                 </div>
@@ -181,9 +268,7 @@ export default function LandingPage() {
       <section className="py-24 px-4 sm:px-6 bg-slate-50">
         <div className="max-w-5xl mx-auto">
           <div className="text-center mb-16">
-            <h2 className="text-3xl sm:text-4xl font-black text-slate-900 mb-4">
-              ¿Cómo funciona?
-            </h2>
+            <h2 className="text-3xl sm:text-4xl font-black text-slate-900 mb-4">¿Cómo funciona?</h2>
             <p className="text-slate-500 text-lg">Tres pasos. Sin fricción.</p>
           </div>
           <div className="grid sm:grid-cols-3 gap-8">
@@ -200,24 +285,64 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── PARA QUIÉN ── */}
+      {/* ── COMPARACIÓN ── */}
       <section className="py-24 px-4 sm:px-6 bg-white">
+        <div className="max-w-4xl mx-auto">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl sm:text-4xl font-black text-slate-900 mb-4">
+              ¿Por qué no Excel o WhatsApp?
+            </h2>
+            <p className="text-slate-500 text-lg">Las herramientas informales tienen un costo oculto.</p>
+          </div>
+          <div className="overflow-x-auto rounded-2xl border border-slate-200 shadow-sm">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-slate-900 text-white">
+                  <th className="text-left px-6 py-4 font-bold">Funcionalidad</th>
+                  <th className="text-center px-4 py-4 font-bold text-blue-400">QuirúrgicaPro</th>
+                  <th className="text-center px-4 py-4 font-bold text-slate-400">Excel</th>
+                  <th className="text-center px-4 py-4 font-bold text-slate-400">WhatsApp</th>
+                </tr>
+              </thead>
+              <tbody>
+                {COMPARISON.map((row, i) => (
+                  <tr key={row.feature} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
+                    <td className="px-6 py-3.5 text-slate-700 font-medium">{row.feature}</td>
+                    <td className="px-4 py-3.5 text-center">
+                      {row.pro ? <CheckCircle className="w-5 h-5 text-green-500 mx-auto" /> : <X className="w-5 h-5 text-red-400 mx-auto" />}
+                    </td>
+                    <td className="px-4 py-3.5 text-center">
+                      {row.excel ? <CheckCircle className="w-5 h-5 text-green-500 mx-auto" /> : <X className="w-5 h-5 text-red-400 mx-auto" />}
+                    </td>
+                    <td className="px-4 py-3.5 text-center">
+                      {row.whatsapp ? <CheckCircle className="w-5 h-5 text-green-500 mx-auto" /> : <X className="w-5 h-5 text-red-400 mx-auto" />}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      {/* ── PARA QUIÉN + SEGURIDAD ── */}
+      <section className="py-24 px-4 sm:px-6 bg-slate-50">
         <div className="max-w-6xl mx-auto">
           <div className="grid lg:grid-cols-2 gap-16 items-center">
             <div>
               <h2 className="text-3xl sm:text-4xl font-black text-slate-900 mb-6">
-                Pensado para clínicas dentales que quieren crecer con orden
+                Pensado para clínicas quirúrgicas que quieren operar con orden
               </h2>
               <p className="text-slate-500 text-lg leading-relaxed mb-8">
                 Si hoy coordinas las cirugías por WhatsApp o Excel, QuirúrgicaPro te da el control
-                que necesitas para escalar sin perder calidad en la atención.
+                que necesitas para escalar sin perder calidad en la atención quirúrgica.
               </p>
               <ul className="space-y-4">
                 {[
-                  'Clínicas con 2 o más dentistas cirujanos',
+                  'Clínicas con 2 o más médicos cirujanos',
                   'Centros con pabellón propio o compartido',
-                  'Clínicas que realizan implantes, endodoncias o cirugías orales',
-                  'Equipos que quieren eliminar el caos de agendamiento manual',
+                  'Clínicas que realizan cirugías generales, cardiovasculares, plásticas u otras especialidades',
+                  'Equipos que quieren eliminar el caos del agendamiento manual',
                 ].map((item) => (
                   <li key={item} className="flex items-start gap-3 text-slate-700">
                     <ChevronRight className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" aria-hidden="true" />
@@ -233,11 +358,12 @@ export default function LandingPage() {
               </div>
               <ul className="space-y-4">
                 {[
-                  { icon: Shield, text: 'Datos cifrados en tránsito y en reposo' },
-                  { icon: Clock, text: 'Registro de auditoría de cada acción' },
+                  { icon: Shield, text: 'Datos cifrados en tránsito y en reposo (AES-256)' },
+                  { icon: Clock, text: 'Registro de auditoría de cada acción del sistema' },
                   { icon: CheckCircle, text: 'Conforme a Ley 19.628 (privacidad Chile)' },
-                  { icon: CheckCircle, text: 'Backups automáticos diarios' },
+                  { icon: CheckCircle, text: 'Respaldos automáticos diarios en Supabase' },
                   { icon: CheckCircle, text: 'Acceso por roles: pabellón y médico separados' },
+                  { icon: FileText, text: 'Exporta todos tus datos en cualquier momento' },
                 ].map(({ icon: Icon, text }) => (
                   <li key={text} className="flex items-center gap-3 text-slate-300 text-sm">
                     <Icon className="w-4 h-4 text-blue-400 flex-shrink-0" aria-hidden="true" />
@@ -250,8 +376,36 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── PRECIOS ── */}
+      {/* ── TESTIMONIOS ── */}
       <section className="py-24 px-4 sm:px-6 bg-white">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-14">
+            <h2 className="text-3xl sm:text-4xl font-black text-slate-900 mb-4">
+              Lo que dicen las clínicas que ya usan QuirúrgicaPro
+            </h2>
+          </div>
+          <div className="grid sm:grid-cols-3 gap-6">
+            {TESTIMONIALS.map((t) => (
+              <div key={t.name} className="bg-slate-50 rounded-2xl p-6 border border-slate-100">
+                <div className="flex gap-0.5 mb-4">
+                  {Array.from({ length: t.stars }).map((_, i) => (
+                    <Star key={i} className="w-4 h-4 fill-amber-400 text-amber-400" />
+                  ))}
+                </div>
+                <p className="text-slate-700 text-sm leading-relaxed mb-5 italic">"{t.text}"</p>
+                <div>
+                  <p className="font-bold text-slate-900 text-sm">{t.name}</p>
+                  <p className="text-xs text-slate-500">{t.role}</p>
+                  <p className="text-xs text-blue-600 font-medium mt-0.5">{t.clinic}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── PRECIOS ── */}
+      <section id="precios" className="py-24 px-4 sm:px-6 bg-slate-50">
         <div className="max-w-5xl mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-3xl sm:text-4xl font-black text-slate-900 mb-4">
@@ -282,12 +436,12 @@ export default function LandingPage() {
                 {[
                   'Usuarios ilimitados (médicos + pabellón)',
                   'Agenda quirúrgica completa',
-                  'Control de inventario',
+                  'Control de inventario + PDF',
                   'Notificaciones automáticas',
                   'Auditoría y trazabilidad',
-                  'Dashboard en tiempo real',
+                  'Importación masiva de médicos (CSV)',
+                  'Wizard de configuración inicial',
                   '1 mes de soporte incluido',
-                  'Instalación y configuración inicial',
                 ].map(item => (
                   <li key={item} className="flex items-start gap-2 text-sm text-slate-700">
                     <CheckCircle className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" aria-hidden="true" />
@@ -303,8 +457,8 @@ export default function LandingPage() {
               </Link>
             </div>
 
-            {/* Plan con soporte extendido */}
-            <div className="rounded-3xl border border-slate-200 p-8 bg-slate-50">
+            {/* Plan con soporte */}
+            <div className="rounded-3xl border border-slate-200 p-8 bg-white">
               <div className="mb-6">
                 <p className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-2">Plan Clínica + Soporte</p>
                 <div className="flex items-end gap-1 mb-1">
@@ -317,7 +471,7 @@ export default function LandingPage() {
                 {[
                   'Todo lo del Plan Clínica',
                   '6 meses de soporte prioritario',
-                  'Personalizaciones menores',
+                  'Personalizaciones menores incluidas',
                   'Capacitación al equipo (2 sesiones)',
                   'Migración de datos existentes',
                   'Actualizaciones durante 1 año',
@@ -347,6 +501,21 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* ── FAQ ── */}
+      <section className="py-24 px-4 sm:px-6 bg-white">
+        <div className="max-w-3xl mx-auto">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl sm:text-4xl font-black text-slate-900 mb-4">Preguntas frecuentes</h2>
+            <p className="text-slate-500">Todo lo que necesitas saber antes de tomar la decisión.</p>
+          </div>
+          <div className="space-y-3">
+            {FAQS.map((faq) => (
+              <FaqItem key={faq.q} q={faq.q} a={faq.a} />
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* ── CTA FINAL ── */}
       <section className="py-24 px-4 sm:px-6 bg-blue-600">
         <div className="max-w-3xl mx-auto text-center">
@@ -354,8 +523,8 @@ export default function LandingPage() {
             ¿Listo para modernizar tu clínica?
           </h2>
           <p className="text-blue-100 text-lg mb-10">
-            Agenda una demostración gratuita. Te mostramos el sistema funcionando con
-            datos reales en menos de 30 minutos.
+            Agenda una demostración gratuita. Te mostramos el sistema funcionando
+            con datos reales en menos de 30 minutos. Sin compromiso.
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <Link
@@ -369,34 +538,42 @@ export default function LandingPage() {
               to="/acceso"
               className="inline-flex items-center justify-center gap-2 bg-blue-700 hover:bg-blue-800 text-white font-bold px-8 py-4 rounded-xl text-base transition-all border border-blue-500"
             >
-              Ver demo ahora
+              Acceder al sistema
               <ArrowRight className="w-4 h-4" aria-hidden="true" />
             </Link>
           </div>
+          <p className="text-blue-200 text-sm mt-6">
+            <MessageSquare className="w-4 h-4 inline mr-1" />
+            También puedes escribirnos directamente a{' '}
+            <a href="mailto:hola@quirurgicapro.cl" className="underline font-medium">
+              hola@quirurgicapro.cl
+            </a>
+          </p>
         </div>
       </section>
 
       {/* ── FOOTER ── */}
-      <footer className="bg-slate-950 py-10 px-4 sm:px-6">
-        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 bg-blue-600 rounded-lg flex items-center justify-center">
-              <Stethoscope className="w-3.5 h-3.5 text-white" aria-hidden="true" />
+      <footer className="bg-slate-950 py-12 px-4 sm:px-6">
+        <div className="max-w-6xl mx-auto">
+          <div className="flex flex-col sm:flex-row justify-between items-center gap-6 mb-8 pb-8 border-b border-slate-800">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 bg-blue-600 rounded-lg flex items-center justify-center">
+                <Stethoscope className="w-3.5 h-3.5 text-white" aria-hidden="true" />
+              </div>
+              <span className="text-white font-black text-sm">QuirúrgicaPro</span>
             </div>
-            <span className="text-white font-bold text-sm">QuirúrgicaPro</span>
+            <div className="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-500">
+              <a href="#precios" className="hover:text-slate-300 transition-colors">Precios</a>
+              <Link to="/contacto" className="hover:text-slate-300 transition-colors">Contacto</Link>
+              <Link to="/politica-privacidad" className="hover:text-slate-300 transition-colors">Privacidad</Link>
+              <Link to="/terminos-uso" className="hover:text-slate-300 transition-colors">Términos de uso</Link>
+              <Link to="/acceso" className="hover:text-slate-300 transition-colors">Ingresar</Link>
+            </div>
           </div>
-          <div className="flex items-center gap-6 text-sm text-slate-500">
-            <Link to="/politica-privacidad" className="hover:text-slate-300 transition-colors">
-              Política de privacidad
-            </Link>
-            <Link to="/contacto" className="hover:text-slate-300 transition-colors">
-              Contacto
-            </Link>
-            <Link to="/acceso" className="hover:text-slate-300 transition-colors">
-              Ingresar
-            </Link>
+          <div className="flex flex-col sm:flex-row justify-between items-center gap-2 text-xs text-slate-600">
+            <p>© {YEAR} QuirúrgicaPro · Todos los derechos reservados · Chile</p>
+            <p>Hecho con ❤️ para clínicas quirúrgicas chilenas</p>
           </div>
-          <p className="text-slate-600 text-xs">© {new Date().getFullYear()} QuirúrgicaPro · Chile</p>
         </div>
       </footer>
 

@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import { sanitizeString } from '../../../utils/sanitizeInput'
 import { useTheme } from '../../../contexts/ThemeContext'
 import { codigosOperaciones } from '../../../data/codigosOperaciones'
+import { PREVISION_OPTIONS } from '../../../utils/previsionConfig'
 
 const inputClass = (theme) => `w-full px-3 sm:px-4 py-2 sm:py-2.5 border-2 rounded-lg sm:rounded-xl focus:border-blue-500 focus:outline-none font-bold text-sm sm:text-base touch-manipulation ${
   theme === 'dark' ? 'bg-slate-800 border-slate-700 text-white'
@@ -17,6 +18,7 @@ export default function FiltrosSolicitudes({
   filtroEstado, setFiltroEstado,
   filtroDoctor, setFiltroDoctor,
   filtroCodigoOperacion, setFiltroCodigoOperacion,
+  filtroPrevision, setFiltroPrevision,
   filtroFechaDesde, setFiltroFechaDesde,
   filtroFechaHasta, setFiltroFechaHasta,
   doctoresUnicos,
@@ -25,7 +27,7 @@ export default function FiltrosSolicitudes({
   solicitudesFiltradas,
 }) {
   const { theme } = useTheme()
-  const hayFiltros = busqueda || filtroDoctor !== 'todos' || filtroCodigoOperacion !== 'todos' || filtroEstado !== 'todas' || filtroFechaDesde || filtroFechaHasta
+  const hayFiltros = busqueda || filtroDoctor !== 'todos' || filtroCodigoOperacion !== 'todos' || filtroEstado !== 'todas' || filtroPrevision !== 'todas' || filtroFechaDesde || filtroFechaHasta
 
   return (
     <div className="mb-6 sm:mb-8 space-y-3 sm:space-y-4">
@@ -66,6 +68,16 @@ export default function FiltrosSolicitudes({
               const codigoObj = codigosOperaciones.find(c => c.codigo === codigo)
               return <option key={codigo} value={codigo}>{codigo} - {codigoObj?.nombre || codigo}</option>
             })}
+          </select>
+        </div>
+
+        <div>
+          <label className={labelClass(theme)}>Filtro por Previsión</label>
+          <select value={filtroPrevision} onChange={e => setFiltroPrevision(sanitizeString(e.target.value))} className={inputClass(theme)}>
+            <option value="todas">Todas las previsiones</option>
+            {PREVISION_OPTIONS.map(o => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
           </select>
         </div>
 

@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+﻿import { useEffect } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../config/supabase'
 import { logger } from '../utils/logger'
@@ -8,7 +8,7 @@ import { useNotifications } from './useNotifications'
  * Hook para escuchar notificaciones en tiempo real usando Supabase Realtime
  * @param {string} userId - ID del usuario actual
  */
-export function useRealtimeNotifications(userId) {
+export function useRealtimeNotifications(userId, doctorId = null) {
   const queryClient = useQueryClient()
   const { showSuccess, showInfo } = useNotifications()
 
@@ -28,13 +28,13 @@ export function useRealtimeNotifications(userId) {
         },
         (payload) => {
           logger.debug('Nueva notificación recibida:', payload.new)
-          queryClient.invalidateQueries(['notifications'])
+          queryClient.invalidateQueries({ queryKey: ['notifications'] })
           showInfo(`Nueva notificación: ${payload.new?.titulo ?? 'Sin título'}`)
         }
       )
       .subscribe()
 
-    // Canal para cambios en solicitudes (solo para doctores)
+    // Canal para cambios en solicitudes — filtrado por doctor cuando es posible
     const requestsChannel = supabase
       .channel(`surgery_requests:${userId}`)
       .on(
@@ -43,12 +43,13 @@ export function useRealtimeNotifications(userId) {
           event: 'UPDATE',
           schema: 'public',
           table: 'surgery_requests',
+          ...(doctorId ? { filter: `doctor_id=eq.${doctorId}` } : {}),
         },
         (payload) => {
           logger.debug('Cambio en solicitud:', payload.new)
-          queryClient.invalidateQueries(['solicitudes'])
-          queryClient.invalidateQueries(['solicitudes-doctor'])
-          queryClient.invalidateQueries(['solicitudes-pendientes'])
+          queryClient.invalidateQueries({ queryKey: ['solicitudes'] })
+          queryClient.invalidateQueries({ queryKey: ['solicitudes-doctor'] })
+          queryClient.invalidateQueries({ queryKey: ['solicitudes-pendientes'] })
           // Los toasts de aceptada/rechazada los maneja el canal 'notifications'
           // (que filtra por user_id) para evitar notificar a todos los doctores.
         }
@@ -67,12 +68,12 @@ export function useRealtimeNotifications(userId) {
         },
         (payload) => {
           logger.debug('Cambio en cirugía:', payload)
-          queryClient.invalidateQueries(['cirugias-hoy'])
-          queryClient.invalidateQueries(['cirugias-calendario'])
-          queryClient.invalidateQueries(['calendario-anual-cirugias'])
-          queryClient.invalidateQueries(['calendario-doctor-cirugias'])
-          queryClient.invalidateQueries(['cirugias-dia-detalle'])
-          queryClient.invalidateQueries(['cirugias-fecha'])
+          queryClient.invalidateQueries({ queryKey: ['cirugias-hoy'] })
+          queryClient.invalidateQueries({ queryKey: ['cirugias-calendario'] })
+          queryClient.invalidateQueries({ queryKey: ['calendario-anual-cirugias'] })
+          queryClient.invalidateQueries({ queryKey: ['calendario-doctor-cirugias'] })
+          queryClient.invalidateQueries({ queryKey: ['cirugias-dia-detalle'] })
+          queryClient.invalidateQueries({ queryKey: ['cirugias-fecha'] })
           
           // Notificar cancelaciones
           if (payload.eventType === 'UPDATE' && payload.new?.estado === 'cancelada' && payload.old?.estado === 'programada') {
@@ -88,5 +89,5 @@ export function useRealtimeNotifications(userId) {
       supabase.removeChannel(requestsChannel)
       supabase.removeChannel(surgeriesChannel)
     }
-  }, [userId, queryClient, showSuccess, showInfo])
+  }, [userId, doctorId, queryClient, showSuccess, showInfo])
 }

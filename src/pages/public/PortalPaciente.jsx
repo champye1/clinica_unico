@@ -38,20 +38,22 @@ export default function PortalPaciente() {
   const [error, setError] = useState(null)
 
   useEffect(() => {
-    const fetch = async () => {
+    let isMounted = true
+    const fetchData = async () => {
       try {
         const { data: result, error: rpcError } = await supabase
           .rpc('get_surgery_by_patient_token', { p_token: token })
         if (rpcError) throw rpcError
-        setData(result)
+        if (isMounted) setData(result)
       } catch (err) {
-        setError(err.message || 'Error al cargar la información')
+        if (isMounted) setError(err.message || 'Error al cargar la información')
       } finally {
-        setLoading(false)
+        if (isMounted) setLoading(false)
       }
     }
-    if (token) fetch()
+    if (token) fetchData()
     else { setError('Enlace inválido'); setLoading(false) }
+    return () => { isMounted = false }
   }, [token])
 
   if (loading) {
@@ -105,7 +107,7 @@ export default function PortalPaciente() {
             </div>
           </div>
           <h1 className="text-xl font-black text-slate-900 tracking-tighter">Portal del Paciente</h1>
-          <p className="text-slate-500 text-xs font-bold uppercase tracking-widest mt-1">Clínica Privada Viña del Mar</p>
+          <p className="text-slate-500 text-xs font-bold uppercase tracking-widest mt-1">Gestión Quirúrgica</p>
         </div>
 
         {/* Paciente */}
@@ -215,6 +217,38 @@ export default function PortalPaciente() {
             </dl>
           </div>
         )}
+
+        {/* Preparación preoperatoria */}
+        {cirugia && ['programada', 'en_proceso'].includes(cirugia.estado) && (
+          <div className="bg-amber-50 rounded-2xl border border-amber-200 p-5">
+            <div className="flex items-center gap-2 mb-4 text-amber-800">
+              <span className="text-xl">⚠️</span>
+              <h2 className="text-base font-black">Indicaciones preoperatorias</h2>
+            </div>
+            <ul className="space-y-3 text-sm text-amber-900">
+              {[
+                { emoji: '🚫', text: 'Ayuno de al menos 8 horas antes de la cirugía (no comer ni beber, incluyendo agua).' },
+                { emoji: '💊', text: 'Si toma medicamentos habituales, consulte con su médico cuáles debe tomar el día de la cirugía.' },
+                { emoji: '🚿', text: 'Ducharse la noche anterior o la mañana de la cirugía. No aplicar cremas, perfumes ni desodorante.' },
+                { emoji: '💍', text: 'No use joyas, piercings ni esmalte de uñas el día de la cirugía.' },
+                { emoji: '👕', text: 'Lleve ropa cómoda y holgada. No llevar objetos de valor.' },
+                { emoji: '🚗', text: 'Organice transporte de regreso. No podrá conducir después de la cirugía.' },
+                { emoji: '📞', text: 'Ante cualquier duda, contacte a la clínica con anticipación.' },
+              ].map(item => (
+                <li key={item.text} className="flex items-start gap-2">
+                  <span className="flex-shrink-0">{item.emoji}</span>
+                  <span className="leading-relaxed">{item.text}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Contacto */}
+        <div className="bg-white rounded-2xl border border-slate-200 p-5 text-center">
+          <p className="text-sm font-bold text-slate-900 mb-1">¿Tienes alguna duda?</p>
+          <p className="text-xs text-slate-500">Contacta directamente a la clínica o a tu médico tratante antes de la cirugía.</p>
+        </div>
 
         <p className="text-center text-[10px] text-slate-400 pb-4">
           Esta información es solo para consulta. Para cualquier duda, contacta a la clínica.

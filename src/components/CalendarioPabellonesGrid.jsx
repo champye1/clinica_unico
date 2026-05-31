@@ -79,7 +79,8 @@ export default function CalendarioPabellonesGrid({ theme, inlineMode = false, on
     slots.forEach(s => {
       const key = s.operating_room_id
       if (!byRoom[key]) byRoom[key] = { nombre: s.nombre_pabellon, slots: {} }
-      const hi = typeof s.hora_inicio === 'string' ? s.hora_inicio.slice(0, 5) : s.hora_inicio
+      const hi = typeof s.hora_inicio === 'string' ? s.hora_inicio.slice(0, 5) : null
+      if (!hi) return
       byRoom[key].slots[hi] = s.estado
     })
     return byRoom
@@ -205,7 +206,7 @@ export default function CalendarioPabellonesGrid({ theme, inlineMode = false, on
       {primerHorario && (
         <div className={`flex flex-wrap items-center gap-3 p-3 rounded-xl border ${isDark ? 'bg-slate-800 border-slate-600' : 'bg-slate-100 border-slate-200'}`}>
           <span className={`text-sm font-medium ${isDark ? 'text-slate-200' : 'text-gray-800'}`}>
-            1º horario: {formatFechaSafe(primerHorario.fecha, 'd/M/yyyy')} — {primerHorario.horarios[0].nombre} {primerHorario.horarios[0].horaInicio}–{primerHorario.horarios[0].horaFin}
+            1º horario: {formatFechaSafe(primerHorario.fecha, 'd/M/yyyy')} — {primerHorario.horarios[0]?.nombre} {primerHorario.horarios[0]?.horaInicio}–{primerHorario.horarios[0]?.horaFin}
           </span>
           <button
             type="button"

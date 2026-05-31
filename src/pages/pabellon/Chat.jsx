@@ -53,7 +53,7 @@ export default function Chat() {
         }
       })
       return Array.from(mapa.values()).sort((a, b) =>
-        new Date(b.lastMessage.created_at) - new Date(a.lastMessage.created_at)
+        new Date(b.lastMessage.created_at ?? 0) - new Date(a.lastMessage.created_at ?? 0)
       )
     },
     refetchInterval: 15000,
@@ -129,7 +129,7 @@ export default function Chat() {
                 )}
               </div>
               <p className={`text-xs mt-0.5 truncate ${textSec}`}>
-                {format(new Date(t.lastMessage.created_at), "d MMM, HH:mm", { locale: es })}
+                {t.lastMessage.created_at ? format(new Date(t.lastMessage.created_at), "d MMM, HH:mm", { locale: es }) : '—'}
                 {' · '}{t.lastMessage.contenido.slice(0, 30)}{t.lastMessage.contenido.length > 30 ? '…' : ''}
               </p>
             </button>

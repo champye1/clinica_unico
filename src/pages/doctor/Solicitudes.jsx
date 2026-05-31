@@ -1,7 +1,8 @@
-import { useState, useMemo, useEffect } from 'react'
+﻿import { useState, useMemo, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../../config/supabase'
 import { Clock, CheckCircle2, XCircle, Edit, X, Package, CalendarClock, Trash2 } from 'lucide-react'
+import { PREVISION_LABELS, PREVISION_COLORS } from '../../utils/previsionConfig'
 import { format } from 'date-fns'
 import { HORAS_SELECT } from '../../utils/horasOpciones'
 import { useNotifications } from '../../hooks/useNotifications'
@@ -12,6 +13,7 @@ import Modal from '../../components/common/Modal'
 import Button from '../../components/common/Button'
 import SearchableSelect from '../../components/SearchableSelect'
 import { codigosOperaciones, getGrupoFonasaByCodigo, insumoAplicaParaGrupo } from '../../data/codigosOperaciones'
+import { logger } from '../../utils/logger'
 
 export default function Solicitudes() {
   const queryClient = useQueryClient()
@@ -58,7 +60,7 @@ export default function Solicitudes() {
         .from('surgery_requests')
         .select(`
           *,
-          patients:patient_id(nombre, apellido, rut, telefono),
+          patients:patient_id(nombre, apellido, rut, telefono, prevision),
           surgery_request_supplies(
             supply_id,
             cantidad,
@@ -151,12 +153,18 @@ export default function Solicitudes() {
       
       if (errorSolicitud) throw errorSolicitud
 
+      // Guardar insumos actuales para rollback
+      const { data: insumosAnteriores } = await supabase
+        .from('surgery_request_supplies')
+        .select('supply_id, cantidad')
+        .eq('surgery_request_id', solicitudId)
+
       // Eliminar insumos existentes
       const { error: errorDelete } = await supabase
         .from('surgery_request_supplies')
         .delete()
         .eq('surgery_request_id', solicitudId)
-      
+
       if (errorDelete) throw errorDelete
 
       // Insertar nuevos insumos
@@ -171,11 +179,19 @@ export default function Solicitudes() {
           .from('surgery_request_supplies')
           .insert(insumosData)
 
-        if (errorInsumos) throw errorInsumos
+        if (errorInsumos) {
+          // Restaurar insumos anteriores para mantener consistencia
+          if (insumosAnteriores?.length) {
+            await supabase.from('surgery_request_supplies').insert(
+              insumosAnteriores.map(s => ({ surgery_request_id: solicitudId, ...s }))
+            )
+          }
+          throw errorInsumos
+        }
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(['solicitudes-doctor'])
+      queryClient.invalidateQueries({ queryKey: ['solicitudes-doctor'] })
       showSuccess('Solicitud actualizada exitosamente')
       setSolicitudEditando(null)
       setFormEdicion({
@@ -303,14 +319,14 @@ export default function Solicitudes() {
         .update({ estado: 'cancelada', updated_at: new Date().toISOString() })
         .eq('id', solicitudId)
       if (error) throw error
-      // Cancelar la cirugía programada si existe
+      // Cancelar la cirugía programada si existe (programada o en_proceso)
       if (cirugiaId) {
-        await supabase
+        const { error: errCirugia } = await supabase
           .from('surgeries')
           .update({ estado: 'cancelada' })
           .eq('id', cirugiaId)
-          .eq('estado', 'programada')
-          .catch(() => {})
+          .in('estado', ['programada', 'en_proceso'])
+        if (errCirugia) throw new Error('Solicitud cancelada, pero no se pudo cancelar la cirugía asociada: ' + errCirugia.message)
       }
       // Si estaba aceptada, notificar a los usuarios de pabellón
       if (estadoActual === 'aceptada') {
@@ -319,18 +335,19 @@ export default function Solicitudes() {
           .select('id')
           .eq('role', 'pabellon')
         for (const u of pabellonUsers || []) {
-          await supabase.from('notifications').insert({
+          const { error: notifErr } = await supabase.from('notifications').insert({
             user_id: u.id,
             tipo: 'solicitud_cancelada',
             titulo: 'Solicitud cancelada por el médico',
             mensaje: `El médico canceló una solicitud previamente aceptada (ID ${solicitudId.slice(0,8)}).`,
             relacionado_con: solicitudId,
-          }).catch(() => {})
+          })
+          if (notifErr) logger.warn('Error al notificar cancelación al pabellón:', notifErr)
         }
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(['solicitudes-doctor'])
+      queryClient.invalidateQueries({ queryKey: ['solicitudes-doctor'] })
       showSuccess('Solicitud cancelada')
       setSolicitudACancelar(null)
     },
@@ -350,7 +367,7 @@ export default function Solicitudes() {
       return data
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(['solicitudes-doctor'])
+      queryClient.invalidateQueries({ queryKey: ['solicitudes-doctor'] })
       showSuccess('Pabellón ha sido notificado de la solicitud de reagendamiento.')
     },
     onError: (error) => {
@@ -394,9 +411,16 @@ export default function Solicitudes() {
               <div key={solicitud.id} className="card">
                 <div className="flex justify-between items-start mb-4">
                   <div>
-                    <h3 className={`text-lg font-bold ${isDark ? 'text-white' : ''}`}>
-                      {solicitud.patients?.nombre} {solicitud.patients?.apellido}
-                    </h3>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className={`text-lg font-bold ${isDark ? 'text-white' : ''}`}>
+                        {solicitud.patients?.nombre} {solicitud.patients?.apellido}
+                      </h3>
+                      {solicitud.patients?.prevision && (
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${PREVISION_COLORS[solicitud.patients.prevision] || 'bg-slate-100 text-slate-600'}`}>
+                          {PREVISION_LABELS[solicitud.patients.prevision] || solicitud.patients.prevision}
+                        </span>
+                      )}
+                    </div>
                     <p className={`text-sm ${isDark ? 'text-slate-300' : 'text-gray-600'}`}>RUT: {solicitud.patients?.rut}</p>
                     {solicitud.patients?.telefono && (
                       <p className={`text-sm ${isDark ? 'text-slate-300' : 'text-gray-600'}`}>Tel: {solicitud.patients.telefono}</p>

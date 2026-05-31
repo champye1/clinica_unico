@@ -1,12 +1,14 @@
-import { useMemo, useState, useEffect } from 'react'
+﻿import { useMemo, useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '../../config/supabase'
-import { ChevronLeft, ChevronRight, Clock, Info, Stethoscope, X, Search, Printer } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Clock, Info, Stethoscope, X, Search, Printer, FileDown } from 'lucide-react'
 import { useNotifications } from '../../hooks/useNotifications'
 import { sanitizeString } from '../../utils/sanitizeInput'
 import { useTheme } from '../../contexts/ThemeContext'
 import { logger } from '../../utils/logger'
+import { useClinicInfo } from '../../hooks/useClinicInfo'
+import { exportProgramaDia } from '../../utils/pdfExport'
 import {
   startOfYear,
   endOfYear,
@@ -32,6 +34,7 @@ export default function Calendario() {
   const fromReagendamientoNotification = location.state?.fromReagendamientoNotification === true
   const isReagendarMode = location.state?.reagendar === true && (location.state?.surgeryRequestId || typeof sessionStorage !== 'undefined' && sessionStorage.getItem('reagendar_solicitud_id'))
   const { showSuccess, showError } = useNotifications()
+  const { data: clinicInfo } = useClinicInfo()
   const [anio, setAnio] = useState(new Date().getFullYear())
   const [pabellonId, setPabellonId] = useState('todos')
   const [filtroPaciente, setFiltroPaciente] = useState('')
@@ -190,11 +193,11 @@ export default function Calendario() {
       return data
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(['solicitudes'])
-      queryClient.invalidateQueries(['solicitudes-pendientes'])
-      queryClient.invalidateQueries(['cirugias-hoy'])
-      queryClient.invalidateQueries(['cirugias-calendario'])
-      queryClient.invalidateQueries(['calendario-anual-cirugias'])
+      queryClient.invalidateQueries({ queryKey: ['solicitudes'] })
+      queryClient.invalidateQueries({ queryKey: ['solicitudes-pendientes'] })
+      queryClient.invalidateQueries({ queryKey: ['cirugias-hoy'] })
+      queryClient.invalidateQueries({ queryKey: ['cirugias-calendario'] })
+      queryClient.invalidateQueries({ queryKey: ['calendario-anual-cirugias'] })
       showSuccess('Cirugía programada exitosamente')
       sessionStorage.removeItem('solicitud_gestionando')
       sessionStorage.removeItem('slot_seleccionado')
@@ -248,6 +251,27 @@ export default function Calendario() {
         const [h, m] = horaFinMut.split(':')
         horaFinMut = `${h.padStart(2, '0')}:${m.padStart(2, '0')}:00`
       }
+
+      // Verificar solapamiento en el pabellón antes de reagendar
+      const { data: conflictos } = await supabase
+        .from('surgeries')
+        .select('id, hora_inicio, hora_fin')
+        .eq('operating_room_id', formData.operating_room_id)
+        .eq('fecha', formData.fecha)
+        .not('estado', 'eq', 'cancelada')
+        .is('deleted_at', null)
+        .neq('id', cirugiaId)
+
+      if (conflictos?.length) {
+        const hay = conflictos.some(c => {
+          const cIni = c.hora_inicio?.slice(0, 5)
+          const cFin = c.hora_fin?.slice(0, 5)
+          if (!cIni || !cFin) return false
+          return horaInicio.slice(0, 5) < cFin && horaFinMut.slice(0, 5) > cIni
+        })
+        if (hay) throw new Error('solapamiento: Ya existe una cirugía en ese horario y pabellón')
+      }
+
       const { error } = await supabase
         .from('surgeries')
         .update({
@@ -262,10 +286,10 @@ export default function Calendario() {
       if (error) throw error
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(['solicitudes'])
-      queryClient.invalidateQueries(['cirugias-hoy'])
-      queryClient.invalidateQueries(['cirugias-calendario'])
-      queryClient.invalidateQueries(['calendario-anual-cirugias'])
+      queryClient.invalidateQueries({ queryKey: ['solicitudes'] })
+      queryClient.invalidateQueries({ queryKey: ['cirugias-hoy'] })
+      queryClient.invalidateQueries({ queryKey: ['cirugias-calendario'] })
+      queryClient.invalidateQueries({ queryKey: ['calendario-anual-cirugias'] })
       showSuccess('Cirugía reagendada. Se notificó al doctor y al pabellón.')
       sessionStorage.removeItem('reagendar_solicitud_id')
       setShowConfirmModal(false)
@@ -325,6 +349,7 @@ export default function Calendario() {
       </table>
     </body></html>`
     const win = window.open('', '_blank')
+    if (!win) { showError('El navegador bloqueó la ventana de impresión. Permite popups para este sitio.'); return }
     win.document.write(html)
     win.document.close()
     win.focus()
@@ -335,7 +360,7 @@ export default function Calendario() {
     if (selectedSlot && currentRequest) {
       const [hours, minutes] = selectedSlot.time.split(':')
       const horaFinDate = new Date()
-      horaFinDate.setHours(parseInt(hours) + 1, parseInt(minutes), 0, 0)
+      horaFinDate.setHours(parseInt(hours, 10) + 1, parseInt(minutes, 10), 0, 0)
       const horaFinStr = `${horaFinDate.getHours().toString().padStart(2, '0')}:${horaFinDate.getMinutes().toString().padStart(2, '0')}`
       setHoraFin(horaFinStr)
       setShowConfirmModal(true)
@@ -419,10 +444,10 @@ export default function Calendario() {
           .from('doctors')
           .select('user_id')
           .eq('id', cirugia.doctor_id)
-          .single()
+          .maybeSingle()
 
         if (doctorUser?.user_id) {
-          await supabase
+          const { error: notifErrCancel } = await supabase
             .from('notifications')
             .insert({
               user_id: doctorUser.user_id,
@@ -431,13 +456,14 @@ export default function Calendario() {
               mensaje: `La cirugía programada para ${cirugia.patients?.nombre} ${cirugia.patients?.apellido} el ${format(new Date(cirugia.fecha), 'dd/MM/yyyy')} a las ${cirugia.hora_inicio} ha sido cancelada por el pabellón.`,
               relacionado_con: cirugiaId,
             })
+          if (notifErrCancel) logger.warn('Error al notificar cancelación al doctor:', notifErrCancel)
         }
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(['calendario-anual-cirugias'])
-      queryClient.invalidateQueries(['cirugias-dia-detalle'])
-      queryClient.invalidateQueries(['cirugias-fecha'])
+      queryClient.invalidateQueries({ queryKey: ['calendario-anual-cirugias'] })
+      queryClient.invalidateQueries({ queryKey: ['cirugias-dia-detalle'] })
+      queryClient.invalidateQueries({ queryKey: ['cirugias-fecha'] })
       showSuccess('Cirugía cancelada exitosamente. El doctor ha sido notificado.')
       setShowConfirmCancelar(false)
       setCirugiaACancelar(null)
@@ -462,11 +488,14 @@ export default function Calendario() {
 
   const marcarEnProceso = useMutation({
     mutationFn: async (cirugiaId) => {
-      const { data: cirugia } = await supabase
+      const { data: cirugia, error: errCirugia } = await supabase
         .from('surgeries')
         .select('doctor_id, fecha, hora_inicio, patients:patient_id(nombre, apellido)')
         .eq('id', cirugiaId)
-        .single()
+        .maybeSingle()
+
+      if (errCirugia) throw errCirugia
+      if (!cirugia) throw new Error('No se encontró la cirugía')
 
       const { error } = await supabase
         .from('surgeries')
@@ -475,22 +504,23 @@ export default function Calendario() {
       if (error) throw error
 
       if (cirugia?.doctor_id) {
-        const { data: doctorUser } = await supabase.from('doctors').select('user_id').eq('id', cirugia.doctor_id).single()
+        const { data: doctorUser } = await supabase.from('doctors').select('user_id').eq('id', cirugia.doctor_id).maybeSingle()
         if (doctorUser?.user_id) {
-          await supabase.from('notifications').insert({
+          const { error: notifErrProceso } = await supabase.from('notifications').insert({
             user_id: doctorUser.user_id,
             tipo: 'operacion_programada',
             titulo: 'Cirugía en proceso',
             mensaje: `La cirugía de ${cirugia.patients?.nombre || ''} ${cirugia.patients?.apellido || ''} del ${format(new Date(cirugia.fecha), 'dd/MM/yyyy')} a las ${cirugia.hora_inicio?.slice(0, 5)} ha comenzado.`,
             relacionado_con: cirugiaId,
           })
+          if (notifErrProceso) logger.warn('Error al notificar inicio de cirugía al doctor:', notifErrProceso)
         }
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(['cirugias-dia-detalle'])
-      queryClient.invalidateQueries(['cirugias-hoy'])
-      queryClient.invalidateQueries(['calendario-anual-cirugias'])
+      queryClient.invalidateQueries({ queryKey: ['cirugias-dia-detalle'] })
+      queryClient.invalidateQueries({ queryKey: ['cirugias-hoy'] })
+      queryClient.invalidateQueries({ queryKey: ['calendario-anual-cirugias'] })
       showSuccess('Cirugía marcada como en proceso.')
       setShowDetallesModal(false)
       setSlotDetalle(null)
@@ -507,9 +537,9 @@ export default function Calendario() {
       if (error) throw error
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(['cirugias-dia-detalle'])
-      queryClient.invalidateQueries(['cirugias-hoy'])
-      queryClient.invalidateQueries(['calendario-anual-cirugias'])
+      queryClient.invalidateQueries({ queryKey: ['cirugias-dia-detalle'] })
+      queryClient.invalidateQueries({ queryKey: ['cirugias-hoy'] })
+      queryClient.invalidateQueries({ queryKey: ['calendario-anual-cirugias'] })
       showSuccess('Cirugía marcada como completada.')
       setShowDetallesModal(false)
       setSlotDetalle(null)
@@ -526,7 +556,7 @@ export default function Calendario() {
       if (error) throw error
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(['cirugias-dia-detalle'])
+      queryClient.invalidateQueries({ queryKey: ['cirugias-dia-detalle'] })
       showSuccess('Observaciones actualizadas.')
       setEditandoObservaciones(false)
       setSlotDetalle(prev => prev ? { ...prev, data: { ...prev.data, observaciones: observacionesEditadas } } : prev)
@@ -1010,15 +1040,26 @@ export default function Calendario() {
                     )}
                   </>
                 )}
-                <button
-                  onClick={imprimirPrograma}
-                  disabled={cirugiasDetalleFiltered.length === 0}
-                  className="ml-auto flex items-center gap-1.5 text-xs font-bold px-3 py-2 border border-slate-200 rounded-xl bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                  title="Imprimir programa quirúrgico del día"
-                >
-                  <Printer size={13} />
-                  Imprimir programa
-                </button>
+                <div className="ml-auto flex items-center gap-2">
+                  <button
+                    onClick={() => exportProgramaDia(cirugiasDetalleFiltered, format(selectedDay, 'yyyy-MM-dd'), clinicInfo)}
+                    disabled={cirugiasDetalleFiltered.length === 0}
+                    className="flex items-center gap-1.5 text-xs font-bold px-3 py-2 border border-blue-200 rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    title="Exportar programa a PDF"
+                  >
+                    <FileDown size={13} />
+                    PDF
+                  </button>
+                  <button
+                    onClick={imprimirPrograma}
+                    disabled={cirugiasDetalleFiltered.length === 0}
+                    className="flex items-center gap-1.5 text-xs font-bold px-3 py-2 border border-slate-200 rounded-xl bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    title="Imprimir programa quirúrgico del día"
+                  >
+                    <Printer size={13} />
+                    Imprimir
+                  </button>
+                </div>
               </div>
               <DayView
                 day={selectedDay}

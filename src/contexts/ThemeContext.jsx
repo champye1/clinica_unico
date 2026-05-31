@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react'
+import { STORAGE_KEYS } from '../utils/storageKeys'
 
 const THEMES = {
   light: {
@@ -44,7 +45,7 @@ const applyThemeToDOM = (themeName) => {
   }
   
   // Guardar en localStorage inmediatamente
-  try { localStorage.setItem('app-theme', themeName) } catch (_) { /* test env */ }
+  try { localStorage.setItem(STORAGE_KEYS.THEME, themeName) } catch (_) { /* test env */ }
   
   // Forzar reflow para aplicar cambios inmediatamente
   void document.body.offsetHeight
@@ -53,7 +54,7 @@ const applyThemeToDOM = (themeName) => {
 export const ThemeProvider = ({ children }) => {
   const [theme, setThemeState] = useState(() => {
     try {
-      const savedTheme = localStorage.getItem('app-theme')
+      const savedTheme = localStorage.getItem(STORAGE_KEYS.THEME)
       const initialTheme = savedTheme && THEMES[savedTheme] ? savedTheme : 'light'
       // Aplicar tema inicial inmediatamente al cargar
       if (typeof document !== 'undefined') {

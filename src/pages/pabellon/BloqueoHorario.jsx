@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+﻿import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../../config/supabase'
 import { Clock, X, Edit, CheckCircle, XCircle, Lock } from 'lucide-react'
@@ -11,6 +11,7 @@ const HORAS_PARA_PREVIEW = HORAS_SELECT
 import ConfirmModal from '../../components/common/ConfirmModal'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
 import { useTheme } from '../../contexts/ThemeContext'
+import { logger } from '../../utils/logger'
 
 export default function BloqueoHorario() {
   const [formData, setFormData] = useState({
@@ -156,13 +157,14 @@ export default function BloqueoHorario() {
 
         for (const c of solapadas) {
           if (c.doctors?.user_id) {
-            await supabase.from('notifications').insert({
+            const { error: notifErr } = await supabase.from('notifications').insert({
               user_id: c.doctors.user_id,
               tipo: 'bloqueo_horario',
               titulo: 'Bloqueo de horario en tu pabellón',
               mensaje: `Se bloqueó el pabellón el ${data.fecha} de ${bloqueoIni.slice(0,5)} a ${bloqueoFin.slice(0,5)}${data.motivo ? ` (${data.motivo})` : ''}. Tu cirugía de ${c.patients?.nombre || ''} ${c.patients?.apellido || ''} podría verse afectada.`,
               relacionado_con: c.id,
-            }).catch(() => {})
+            })
+            if (notifErr) logger.warn('Error al notificar bloqueo al doctor:', notifErr)
           }
         }
 
@@ -173,8 +175,8 @@ export default function BloqueoHorario() {
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(['bloqueos'])
-      queryClient.invalidateQueries(['cirugias-validacion'])
+      queryClient.invalidateQueries({ queryKey: ['bloqueos'] })
+      queryClient.invalidateQueries({ queryKey: ['cirugias-validacion'] })
       queryClient.invalidateQueries({ queryKey: ['calendario-anual-bloqueos'] })
       queryClient.invalidateQueries({ queryKey: ['ocupacion-hoy'] })
       setFormData({
@@ -210,8 +212,8 @@ export default function BloqueoHorario() {
       if (error) throw error
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(['bloqueos'])
-      queryClient.invalidateQueries(['cirugias-validacion'])
+      queryClient.invalidateQueries({ queryKey: ['bloqueos'] })
+      queryClient.invalidateQueries({ queryKey: ['cirugias-validacion'] })
       queryClient.invalidateQueries({ queryKey: ['calendario-anual-bloqueos'] })
       queryClient.invalidateQueries({ queryKey: ['ocupacion-hoy'] })
       setFormData({
@@ -247,8 +249,8 @@ export default function BloqueoHorario() {
       if (error) throw error
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(['bloqueos'])
-      queryClient.invalidateQueries(['cirugias-validacion'])
+      queryClient.invalidateQueries({ queryKey: ['bloqueos'] })
+      queryClient.invalidateQueries({ queryKey: ['cirugias-validacion'] })
       queryClient.invalidateQueries({ queryKey: ['calendario-anual-bloqueos'] })
       queryClient.invalidateQueries({ queryKey: ['ocupacion-hoy'] })
       showSuccess('Bloqueo eliminado exitosamente')
@@ -277,6 +279,7 @@ export default function BloqueoHorario() {
 
     // Validar solapamiento con cirugías
     for (const cirugia of cirugias) {
+      if (!cirugia.hora_inicio || !cirugia.hora_fin) continue
       const [cInicioH, cInicioM] = cirugia.hora_inicio.split(':').map(Number)
       const [cFinH, cFinM] = cirugia.hora_fin.split(':').map(Number)
       const cMinutosInicio = cInicioH * 60 + cInicioM
@@ -298,6 +301,7 @@ export default function BloqueoHorario() {
     )
 
     for (const bloqueo of bloqueosExistentes) {
+      if (!bloqueo.hora_inicio || !bloqueo.hora_fin) continue
       const [bInicioH, bInicioM] = bloqueo.hora_inicio.split(':').map(Number)
       const [bFinH, bFinM] = bloqueo.hora_fin.split(':').map(Number)
       const bMinutosInicio = bInicioH * 60 + bInicioM

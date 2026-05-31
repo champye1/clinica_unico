@@ -6,6 +6,7 @@ import LoadingSpinner from './components/common/LoadingSpinner'
 
 const LandingPage        = lazy(() => import('./pages/public/LandingPage'))
 const PoliticaPrivacidad = lazy(() => import('./pages/public/PoliticaPrivacidad'))
+const TerminosUso        = lazy(() => import('./pages/public/TerminosUso'))
 const NotFound           = lazy(() => import('./pages/public/NotFound'))
 const Inicio            = lazy(() => import('./pages/auth/Inicio'))
 const LoginPabellon     = lazy(() => import('./pages/auth/LoginPabellon'))
@@ -169,6 +170,7 @@ function AppContent() {
       />
 
       <Route path="/politica-privacidad" element={<PoliticaPrivacidad />} />
+      <Route path="/terminos-uso" element={<TerminosUso />} />
       
       <Route 
         path="/login/pabellon" 

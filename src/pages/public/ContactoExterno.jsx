@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '../../config/supabase'
-import { Stethoscope, Send, CheckCircle2, AlertCircle } from 'lucide-react'
+import { Stethoscope, Send, CheckCircle2, AlertCircle, Phone, Mail, MapPin } from 'lucide-react'
 import { sanitizeString, sanitizeRut } from '../../utils/sanitizeInput'
 import { isValidRutFormat, validateRut } from '../../utils/rutFormatter'
 
@@ -19,6 +19,17 @@ const ESPECIALIDADES = [
 ]
 
 export default function ContactoExterno() {
+  const [clinicInfo, setClinicInfo] = useState(null)
+
+  useEffect(() => {
+    supabase
+      .from('clinic_settings')
+      .select('value')
+      .eq('key', 'clinic_info')
+      .maybeSingle()
+      .then(({ data }) => { if (data?.value) setClinicInfo(data.value) })
+  }, [])
+
   const [form, setForm] = useState({
     nombre_remitente: '',
     email_remitente: '',
@@ -99,6 +110,29 @@ export default function ContactoExterno() {
         })
 
       if (dbError) throw dbError
+
+      // Notificar inmediatamente al equipo de pabellón
+      try {
+        const { data: pabellonUsers } = await supabase
+          .from('users')
+          .select('id')
+          .eq('role', 'pabellon')
+          .is('deleted_at', null)
+        if (pabellonUsers?.length) {
+          await supabase.from('notifications').insert(
+            pabellonUsers.map(u => ({
+              user_id: u.id,
+              tipo: 'mensaje_externo',
+              titulo: `Nuevo mensaje externo${form.urgencia === 'urgente' ? ' ⚠️ URGENTE' : ''}`,
+              mensaje: `${form.nombre_remitente} (${form.especialidad_remitente || 'médico'}): ${form.asunto}`,
+              relacionado_con: null,
+            }))
+          )
+        }
+      } catch {
+        // No bloquear el flujo si falla la notificación
+      }
+
       setEnviado(true)
     } catch (err) {
       setError('Error al enviar el mensaje. Por favor intente nuevamente.')
@@ -114,10 +148,17 @@ export default function ContactoExterno() {
           <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
             <CheckCircle2 className="w-8 h-8 text-green-600" />
           </div>
-          <h2 className="text-2xl font-black text-slate-900 mb-3">Mensaje enviado</h2>
-          <p className="text-slate-600 text-sm mb-6">
-            Su solicitud fue recibida correctamente. El personal de pabellón se comunicará a la brevedad para coordinar la disponibilidad horaria.
+          <h2 className="text-2xl font-black text-slate-900 mb-3">¡Mensaje enviado!</h2>
+          <p className="text-slate-600 text-sm mb-2">
+            Su solicitud fue recibida correctamente. El equipo de {clinicInfo?.nombre || 'la clínica'} se comunicará en un plazo de <strong>24 horas hábiles</strong> para coordinar disponibilidad horaria.
           </p>
+          {clinicInfo?.telefono && (
+            <p className="text-slate-500 text-xs mb-6">
+              Si su caso es urgente, puede contactarnos directamente al{' '}
+              <a href={`tel:${clinicInfo.telefono}`} className="text-blue-600 font-semibold">{clinicInfo.telefono}</a>
+            </p>
+          )}
+          {!clinicInfo?.telefono && <div className="mb-6" />}
           <button
             onClick={() => {
               setEnviado(false)
@@ -147,7 +188,9 @@ export default function ContactoExterno() {
               <Stethoscope className="text-white w-5 h-5" />
             </div>
             <div className="text-left">
-              <h1 className="text-base font-black text-slate-900 uppercase tracking-tight leading-none">SurgicalHUB</h1>
+              <h1 className="text-base font-black text-slate-900 uppercase tracking-tight leading-none">
+                {clinicInfo?.nombre || 'QuirúrgicaPro'}
+              </h1>
               <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Portal Clínico</span>
             </div>
           </div>
@@ -157,6 +200,30 @@ export default function ContactoExterno() {
           <p className="text-slate-500 text-sm mt-2">
             Complete el formulario y el equipo de pabellón se contactará para ofrecer disponibilidad horaria.
           </p>
+
+          {/* Datos de contacto directo */}
+          {(clinicInfo?.telefono || clinicInfo?.email || clinicInfo?.direccion) && (
+            <div className="mt-4 flex flex-wrap justify-center gap-4 text-xs text-slate-500">
+              {clinicInfo?.telefono && (
+                <span className="flex items-center gap-1.5">
+                  <Phone className="w-3.5 h-3.5 text-blue-500" />
+                  {clinicInfo.telefono}
+                </span>
+              )}
+              {clinicInfo?.email && (
+                <a href={`mailto:${clinicInfo.email}`} className="flex items-center gap-1.5 hover:text-blue-600">
+                  <Mail className="w-3.5 h-3.5 text-blue-500" />
+                  {clinicInfo.email}
+                </a>
+              )}
+              {clinicInfo?.direccion && (
+                <span className="flex items-center gap-1.5">
+                  <MapPin className="w-3.5 h-3.5 text-blue-500" />
+                  {clinicInfo.direccion}
+                </span>
+              )}
+            </div>
+          )}
         </div>
 
         <form onSubmit={handleSubmit} className="bg-white rounded-3xl shadow-sm border border-slate-200 p-6 sm:p-8 space-y-6">

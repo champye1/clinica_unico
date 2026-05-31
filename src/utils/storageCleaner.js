@@ -4,6 +4,7 @@
  */
 
 import { clearAllLoginAttempts } from './rateLimiter'
+import { STORAGE_KEYS } from './storageKeys'
 import { logger } from './logger'
 
 /**
@@ -15,13 +16,15 @@ export function clearAllAppData() {
     // Limpiar intentos de login
     clearAllLoginAttempts()
 
-    // Limpiar datos de solicitudes quirúrgicas
+    // Limpiar datos de solicitudes quirúrgicas y navegación
     sessionStorage.removeItem('solicitud_gestionando')
     sessionStorage.removeItem('slot_seleccionado')
     sessionStorage.removeItem('validating_login')
+    sessionStorage.removeItem('reagendar_solicitud_id')
+    sessionStorage.removeItem('calendario_ir_hoy')
 
     // Limpiar recordatorios temporales
-    localStorage.removeItem('recordatorio-temporal')
+    localStorage.removeItem(STORAGE_KEYS.RECORDATORIO_TEMPORAL)
 
     // El tema se mantiene (no es sensible)
     // localStorage.removeItem('app-theme') // Opcional: descomentar si quieres resetear el tema también

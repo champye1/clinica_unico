@@ -25,9 +25,12 @@ jobs:
         run: npm ci
 
       - name: Security audit
-        # Fails on critical vulnerabilities. xlsx has an unresolved 'high'
-        # advisory with no fix available — tracked and accepted separately.
-        run: npm audit --audit-level=critical
+        # Fails on critical/high vulnerabilities. xlsx (HIGH) was replaced by exceljs.
+        # Remaining moderate: uuid transitive dep in exceljs — no fix available upstream.
+        run: npm audit --audit-level=high
+
+      - name: TypeScript type check
+        run: npm run typecheck
 
       - name: Lint
         run: npm run lint

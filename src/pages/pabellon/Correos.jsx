@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+﻿import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../../config/supabase'
 import { logger } from '../../utils/logger'
@@ -118,7 +118,7 @@ export default function Correos() {
       if (error) throw error
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(['gmail-config'])
+      queryClient.invalidateQueries({ queryKey: ['gmail-config'] })
       setShowGmailConfig(false)
       showSuccess('Configuración de Gmail guardada correctamente.')
     },
@@ -154,7 +154,7 @@ export default function Correos() {
       if (error) throw error
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(['whatsapp-config'])
+      queryClient.invalidateQueries({ queryKey: ['whatsapp-config'] })
       setShowWspConfig(false)
       showSuccess('Configuración de WhatsApp guardada correctamente.')
     },
@@ -171,8 +171,8 @@ export default function Correos() {
       if (error) throw error
       if (data?.inserted > 0) {
         showSuccess(`Se importaron ${data.inserted} mensaje(s) nuevo(s).`)
-        queryClient.invalidateQueries(['external-messages'])
-        queryClient.invalidateQueries(['external-messages-count'])
+        queryClient.invalidateQueries({ queryKey: ['external-messages'] })
+        queryClient.invalidateQueries({ queryKey: ['external-messages-count'] })
       } else {
         logger.debug('poll-gmail response:', data)
         showSuccess('No hay mensajes nuevos en Gmail.')
@@ -213,9 +213,9 @@ export default function Correos() {
       if (error) throw error
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(['external-messages'])
-      queryClient.invalidateQueries(['external-messages-count'])
-      queryClient.invalidateQueries(['external-messages-unread'])
+      queryClient.invalidateQueries({ queryKey: ['external-messages'] })
+      queryClient.invalidateQueries({ queryKey: ['external-messages-count'] })
+      queryClient.invalidateQueries({ queryKey: ['external-messages-unread'] })
     },
   })
 
@@ -228,9 +228,9 @@ export default function Correos() {
       if (error) throw error
     },
     onSuccess: (_, { archivar: val }) => {
-      queryClient.invalidateQueries(['external-messages'])
-      queryClient.invalidateQueries(['external-messages-count'])
-      queryClient.invalidateQueries(['external-messages-unread'])
+      queryClient.invalidateQueries({ queryKey: ['external-messages'] })
+      queryClient.invalidateQueries({ queryKey: ['external-messages-count'] })
+      queryClient.invalidateQueries({ queryKey: ['external-messages-unread'] })
       showSuccess(val ? 'Mensaje archivado' : 'Mensaje restaurado')
     },
     onError: () => showError('Error al archivar el mensaje'),
@@ -245,9 +245,9 @@ export default function Correos() {
       if (error) throw error
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(['external-messages'])
-      queryClient.invalidateQueries(['external-messages-count'])
-      queryClient.invalidateQueries(['external-messages-unread'])
+      queryClient.invalidateQueries({ queryKey: ['external-messages'] })
+      queryClient.invalidateQueries({ queryKey: ['external-messages-count'] })
+      queryClient.invalidateQueries({ queryKey: ['external-messages-unread'] })
       showSuccess('Mensaje eliminado')
       if (mensajeAbierto) setMensajeAbierto(null)
     },
@@ -262,7 +262,7 @@ export default function Correos() {
         .update({ notas_internas: notasEditando })
         .eq('id', id)
       if (error) throw error
-      queryClient.invalidateQueries(['external-messages'])
+      queryClient.invalidateQueries({ queryKey: ['external-messages'] })
       showSuccess('Notas guardadas')
     } catch {
       showError('Error al guardar notas')
@@ -472,7 +472,7 @@ export default function Correos() {
                   {/* Fecha + expand */}
                   <div className="flex-shrink-0 flex flex-col items-end gap-2 ml-2">
                     <span className={`text-[10px] font-bold ${isDark ? 'text-slate-400' : 'text-slate-400'}`}>
-                      {format(new Date(m.created_at), "d MMM", { locale: es })}
+                      {m.created_at ? format(new Date(m.created_at), "d MMM", { locale: es }) : '—'}
                     </span>
                     {isExpanded ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
                   </div>

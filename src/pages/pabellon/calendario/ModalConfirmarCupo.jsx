@@ -161,7 +161,7 @@ export default function ModalConfirmarCupo({
             <ul className="space-y-1">
               {conflictoAgenda.cirugias.map(c => (
                 <li key={c.id} className="text-xs text-amber-800 font-medium">
-                  {c.hora_inicio?.slice(0, 5)}–{c.hora_fin?.slice(0, 5)} · {c.patients?.nombre} {c.patients?.apellido} · {c.operating_rooms?.nombre}
+                  {c.hora_inicio?.slice(0, 5)}–{c.hora_fin?.slice(0, 5)} · {c.patients?.nombre || 'Paciente'} {c.patients?.apellido || ''} · {c.operating_rooms?.nombre || 'Pabellón'}
                 </li>
               ))}
             </ul>
@@ -175,7 +175,8 @@ export default function ModalConfirmarCupo({
               </button>
               <button
                 onClick={() => { setIgnorarConflicto(true); setConflictoAgenda(null); onConfirmar() }}
-                className="text-xs font-bold px-3 py-1.5 rounded-lg bg-amber-600 text-white hover:bg-amber-700 transition-colors"
+                disabled={isPending}
+                className="text-xs font-bold px-3 py-1.5 rounded-lg bg-amber-600 text-white hover:bg-amber-700 transition-colors disabled:opacity-60"
               >
                 Sí, confirmar igual
               </button>

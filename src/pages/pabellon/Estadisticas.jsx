@@ -3,9 +3,11 @@ import { useQuery } from '@tanstack/react-query'
 import { supabase } from '../../config/supabase'
 import { useTheme } from '../../contexts/ThemeContext'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
-import { TrendingUp, CheckCircle, XCircle, Clock, Activity, Package, Users } from 'lucide-react'
+import { TrendingUp, CheckCircle, XCircle, Clock, Activity, Package, Users, FileDown } from 'lucide-react'
 import { format, subMonths, startOfMonth, endOfMonth } from 'date-fns'
 import { es } from 'date-fns/locale'
+import { useClinicInfo } from '../../hooks/useClinicInfo'
+import { exportEstadisticasMensuales } from '../../utils/pdfExport'
 
 const COLORES_ESTADO = {
   completada: '#22c55e',
@@ -17,6 +19,7 @@ const COLORES_ESTADO = {
 export default function Estadisticas() {
   const { theme } = useTheme()
   const dark = theme === 'dark'
+  const { data: clinicInfo } = useClinicInfo()
 
   const hoy = new Date()
   const [fechaDesde, setFechaDesde] = useState(format(startOfMonth(subMonths(hoy, 5)), 'yyyy-MM-dd'))
@@ -44,7 +47,7 @@ export default function Estadisticas() {
   })
 
   // Solicitudes en el rango
-  const { isLoading: loadingSolicitudes } = useQuery({
+  const { data: solicitudes = [], isLoading: loadingSolicitudes } = useQuery({
     queryKey: ['estadisticas-solicitudes', fechaDesde, fechaHasta],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -166,6 +169,18 @@ export default function Estadisticas() {
               className="input-field text-sm py-1.5 px-3"
             />
           </div>
+          <button
+            onClick={() => {
+              const periodo = `${fechaDesde} al ${fechaHasta}`
+              exportEstadisticasMensuales(cirugias, solicitudes, periodo, clinicInfo)
+            }}
+            disabled={loading || cirugias.length === 0}
+            className="flex items-center gap-1.5 text-xs font-bold px-3 py-2 border border-blue-200 rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            title="Exportar reporte a PDF"
+          >
+            <FileDown size={14} />
+            Exportar PDF
+          </button>
         </div>
       </div>
 

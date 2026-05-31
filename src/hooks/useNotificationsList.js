@@ -60,6 +60,7 @@ export function useNotificationsList(userId, options = {}) {
 
   const markAllAsRead = useMutation({
     mutationFn: async () => {
+      if (!userId) throw new Error('userId requerido para marcar notificaciones')
       const { error } = await supabase
         .from('notifications')
         .update({ vista: true })

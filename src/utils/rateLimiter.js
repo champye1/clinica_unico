@@ -1,11 +1,8 @@
-/**
- * Utilidad para rate limiting en el frontend
- * Previene ataques de fuerza bruta limitando intentos de login
- */
+import { STORAGE_KEYS } from './storageKeys'
 
 const MAX_ATTEMPTS = 5
 const LOCKOUT_DURATION = 15 * 60 * 1000 // 15 minutos en milisegundos
-const STORAGE_KEY_PREFIX = 'login_attempts_'
+const STORAGE_KEY_PREFIX = STORAGE_KEYS.LOGIN_ATTEMPTS_PREFIX
 
 /**
  * Obtiene el contador de intentos fallidos para un identificador

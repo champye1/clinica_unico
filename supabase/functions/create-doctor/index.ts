@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { checkRateLimit } from '../_shared/rateLimit.ts'
 
 // ========== CONSTANTES (buenas prácticas: un solo lugar para límites y mensajes) ==========
 const LIMITS = {
@@ -233,6 +234,19 @@ serve(async (req) => {
       )
     }
 
+    // Rate limiting: máximo 10 médicos creados por hora por usuario
+    const { allowed, remaining, retryAfterSecs } = await checkRateLimit(supabaseAdmin, user.id, 'create-doctor', 10, 60)
+    if (!allowed) {
+      return jsonResponse(
+        { success: false, error: 'Límite de solicitudes excedido. Intente nuevamente en una hora.' },
+        429,
+        { ...corsHeaders, 'Retry-After': String(retryAfterSecs ?? 3600) }
+      )
+    }
+    if (remaining <= 2) {
+      console.warn(`[create-doctor] Usuario ${user.id} tiene ${remaining} llamadas restantes en esta hora`)
+    }
+
     let nombre = asString(body.nombre)
     let apellido = asString(body.apellido)
     const rutRaw = asString(body.rut)
@@ -400,12 +414,25 @@ serve(async (req) => {
     const tempPassword = rawPassword.length > 0
       ? rawPassword
       : (() => {
-          const letras = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
-          const numeros = '0123456789'
-          let p = letras[Math.floor(Math.random() * letras.length)] + numeros[Math.floor(Math.random() * numeros.length)]
-          const todos = letras + numeros
-          for (let i = 2; i < 6; i++) p += todos[Math.floor(Math.random() * todos.length)]
-          return p.split('').sort(() => Math.random() - 0.5).join('')
+          const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
+          const digits = '0123456789'
+          const all = letters + digits
+          const bytes = new Uint8Array(12)
+          crypto.getRandomValues(bytes)
+          // Primeros 2: garantizan al menos una letra y un dígito
+          const arr = [
+            letters[bytes[0] % letters.length],
+            digits[bytes[1] % digits.length],
+            ...Array.from(bytes.slice(2), b => all[b % all.length]),
+          ]
+          // Fisher-Yates shuffle criptográfico
+          const shuffleBytes = new Uint8Array(arr.length)
+          crypto.getRandomValues(shuffleBytes)
+          for (let i = arr.length - 1; i > 0; i--) {
+            const j = shuffleBytes[i] % (i + 1)
+            ;[arr[i], arr[j]] = [arr[j], arr[i]]
+          }
+          return arr.join('')
         })()
     
     const userEmail = email
