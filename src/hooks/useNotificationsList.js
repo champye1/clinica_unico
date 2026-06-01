@@ -17,7 +17,7 @@ export function useNotificationsList(userId, options = {}) {
         .eq('user_id', userId)
         .is('deleted_at', null)
         .order('created_at', { ascending: false })
-        .limit(50)
+        .limit(200)
       if (error) {
         logger.errorWithContext('Error al obtener notificaciones', error)
         return []

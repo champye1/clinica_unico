@@ -77,23 +77,23 @@ const COMPARISON = [
 
 const TESTIMONIALS = [
   {
-    name: 'Dr. A.M.',
-    role: 'Director Médico',
-    clinic: 'Clínica quirúrgica, Región de Valparaíso',
+    name: 'Director Médico',
+    role: 'Clínica quirúrgica',
+    clinic: 'Región de Valparaíso',
     text: 'Antes coordinábamos todo por WhatsApp. Hoy cada médico ve su agenda en tiempo real y el pabellón no pierde tiempo en llamadas. El cambio fue inmediato.',
     stars: 5,
   },
   {
-    name: 'P.F.',
-    role: 'Jefa de Pabellón',
-    clinic: 'Centro quirúrgico privado, Región Metropolitana',
+    name: 'Jefa de Pabellón',
+    role: 'Centro quirúrgico privado',
+    clinic: 'Región Metropolitana',
     text: 'La importación masiva de médicos nos ahorró días de trabajo al inicio. El wizard de configuración fue muy intuitivo para todo el equipo.',
     stars: 5,
   },
   {
-    name: 'Dr. R.A.',
-    role: 'Cirujano General',
-    clinic: 'Clínica privada, Santiago',
+    name: 'Cirujano General',
+    role: 'Clínica privada',
+    clinic: 'Santiago',
     text: 'Por fin tengo visibilidad de mis cirugías desde el celular. Las notificaciones automáticas son un diferenciador enorme para los pacientes.',
     stars: 5,
   },

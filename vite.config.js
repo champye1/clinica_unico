@@ -53,6 +53,7 @@ export default defineConfig({
     },
   },
   build: {
+    sourcemap: false,
     target: 'esnext',
     rollupOptions: {
       output: {

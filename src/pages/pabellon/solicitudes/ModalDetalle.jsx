@@ -3,7 +3,7 @@ import { X, User, Stethoscope, Package, FileText, Clock, AlertCircle, Link2, Dow
 import { format } from 'date-fns'
 import { useTheme } from '../../../contexts/ThemeContext'
 import { codigosOperaciones } from '../../../data/codigosOperaciones'
-import { exportSolicitudPDF } from '../../../utils/exportData'
+import { exportSolicitudPDF, maskRut } from '../../../utils/exportData'
 import { PREVISION_LABELS, PREVISION_COLORS } from '../../../utils/previsionConfig'
 
 function getEstadoBadge(estado) {
@@ -85,7 +85,7 @@ export default function ModalDetalle({ solicitud, onClose, generarEnlacePaciente
               </div>
               <div>
                 <p className={`text-xs font-black uppercase tracking-wider mb-1 ${theme === 'dark' ? 'text-slate-400' : 'text-slate-400'}`}>RUT</p>
-                <p className={`text-sm font-bold ${theme === 'dark' ? 'text-white' : 'text-slate-700'}`}>{solicitud.patients?.rut}</p>
+                <p className={`text-sm font-bold ${theme === 'dark' ? 'text-white' : 'text-slate-700'}`}>{maskRut(solicitud.patients?.rut)}</p>
               </div>
               <div>
                 <p className={`text-xs font-black uppercase tracking-wider mb-1 ${theme === 'dark' ? 'text-slate-400' : 'text-slate-400'}`}>Previsión de Salud</p>

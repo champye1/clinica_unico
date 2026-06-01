@@ -24,7 +24,7 @@ const descargarICS = (cirugias) => {
       'BEGIN:VEVENT',
       `DTSTART;TZID=America/Santiago:${fecha}T${hi}`,
       `DTEND;TZID=America/Santiago:${fecha}T${hf}`,
-      `SUMMARY:Cirugía - ${nombre}`,
+      `SUMMARY:Cirugía programada`,
       `DESCRIPTION:Pabellón: ${c.operating_rooms?.nombre || ''}\\nEstado: ${c.estado || ''}`,
       `UID:cirugia-${c.id}@quirurgicapro`,
       'END:VEVENT',
@@ -76,6 +76,7 @@ export default function Dashboard() {
         .eq('fecha', format(new Date(), 'yyyy-MM-dd'))
         .is('deleted_at', null)
         .order('hora_inicio', { ascending: true })
+        .limit(50)
       
       if (error) throw error
       return data

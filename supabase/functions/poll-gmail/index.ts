@@ -47,7 +47,7 @@ async function getAccessToken(clientId: string, clientSecret: string, refreshTok
 
 /** Obtiene los IDs de mensajes no leídos en el inbox */
 async function getUnreadMessageIds(accessToken: string): Promise<string[]> {
-  const url = `${GMAIL_API_BASE}/messages?q=is:unread&maxResults=20`
+  const url = `${GMAIL_API_BASE}/messages?q=is:unread&maxResults=50`
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${accessToken}` },
   })

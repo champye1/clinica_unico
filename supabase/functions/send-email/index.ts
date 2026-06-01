@@ -172,8 +172,16 @@ serve(async (req) => {
 
     const accessToken = await getAccessToken(gmailClientId, gmailClientSecret, gmailRefreshToken)
 
+    // Leer nombre de clínica desde configuración (fallback a nombre genérico)
+    const { data: clinicRow } = await supabase
+      .from('clinic_settings')
+      .select('value')
+      .eq('key', 'clinic_info')
+      .maybeSingle()
+    const clinicNombre = (clinicRow?.value as Record<string, string>)?.nombre || 'Portal Clínico'
+
     const raw = buildRawEmail({
-      from:    `QuirúrgicaPro <${gmailEmail}>`,
+      from:    `${clinicNombre} <${gmailEmail}>`,
       to,
       subject,
       html,

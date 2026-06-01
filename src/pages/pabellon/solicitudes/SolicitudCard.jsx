@@ -96,14 +96,20 @@ export default function SolicitudCard({
             </span>
           )}
         </div>
-        {solicitud.reagendamiento_notificado_at && (
-          <div className={`mt-2 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-2 w-fit ${
-            theme === 'dark' ? 'bg-amber-900/40 text-amber-200 border border-amber-700' : 'bg-amber-100 text-amber-900 border border-amber-200'
-          }`}>
-            <CalendarClock className="w-3.5 h-3.5 flex-shrink-0" />
-            <span>El doctor solicitó reagendamiento ({format(new Date(solicitud.reagendamiento_notificado_at), 'dd/MM/yyyy HH:mm')})</span>
-          </div>
-        )}
+        {solicitud.reagendamiento_notificado_at && (() => {
+          try {
+            const d = new Date(solicitud.reagendamiento_notificado_at)
+            if (isNaN(d.getTime())) return null
+            return (
+              <div className={`mt-2 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-2 w-fit ${
+                theme === 'dark' ? 'bg-amber-900/40 text-amber-200 border border-amber-700' : 'bg-amber-100 text-amber-900 border border-amber-200'
+              }`}>
+                <CalendarClock className="w-3.5 h-3.5 flex-shrink-0" />
+                <span>El doctor solicitó reagendamiento ({format(d, 'dd/MM/yyyy HH:mm')})</span>
+              </div>
+            )
+          } catch { return null }
+        })()}
       </div>
 
       {/* Botones */}

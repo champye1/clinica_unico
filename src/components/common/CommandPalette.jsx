@@ -64,7 +64,7 @@ export default function CommandPalette({ isOpen, onClose, basePrefix }) {
           items: pacientes.map(p => ({
             id: `paciente-${p.id}`,
             titulo: `${p.nombre} ${p.apellido}`,
-            subtitulo: p.rut ? formatRut(p.rut) : '',
+            subtitulo: '',
             accion: () => { navigate(`${basePrefix}/paciente`); onClose() },
           })),
         })

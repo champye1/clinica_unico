@@ -156,7 +156,7 @@ export default function Estadisticas() {
             <input
               type="date"
               value={fechaDesde}
-              onChange={e => setFechaDesde(e.target.value)}
+              onChange={e => { if (/^\d{4}-\d{2}-\d{2}$/.test(e.target.value)) setFechaDesde(e.target.value) }}
               className="input-field text-sm py-1.5 px-3"
             />
           </div>
@@ -165,7 +165,7 @@ export default function Estadisticas() {
             <input
               type="date"
               value={fechaHasta}
-              onChange={e => setFechaHasta(e.target.value)}
+              onChange={e => { if (/^\d{4}-\d{2}-\d{2}$/.test(e.target.value)) setFechaHasta(e.target.value) }}
               className="input-field text-sm py-1.5 px-3"
             />
           </div>

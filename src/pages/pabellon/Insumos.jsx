@@ -244,13 +244,15 @@ export default function Insumos() {
 
   const registrarMovimiento = useMutation({
     mutationFn: async () => {
+      const cantidad = parseInt(stockForm.cantidad)
+      if (!Number.isInteger(cantidad) || cantidad < 1) throw new Error('La cantidad debe ser un número entero positivo')
       const { data: { user } } = await supabase.auth.getUser()
       const { error } = await supabase
         .from('supply_movements')
         .insert({
           supply_id: insumoStock.id,
           tipo: stockForm.tipo,
-          cantidad: parseInt(stockForm.cantidad),
+          cantidad,
           motivo: stockForm.motivo || null,
           created_by: user.id,
         })

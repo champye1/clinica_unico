@@ -55,8 +55,8 @@ export default function RestablecerContraseña() {
       setError('Las contraseñas no coinciden.')
       return
     }
-    if (password.length < 6) {
-      setError('La contraseña debe tener al menos 6 caracteres.')
+    if (password.length < 12) {
+      setError('La contraseña debe tener al menos 12 caracteres.')
       return
     }
     setLoading(true)

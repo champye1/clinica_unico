@@ -125,7 +125,7 @@ export default function BaseLayout({ menuItems, portalLabel, badgeCounts = {}, o
   const handleLogout = async () => {
     const { clearAllAppData } = await import('../utils/storageCleaner')
     clearAllAppData()
-    await supabase.auth.signOut()
+    await supabase.auth.signOut({ scope: 'global' })
     window.location.href = '/'
   }
 

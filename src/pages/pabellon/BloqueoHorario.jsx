@@ -161,7 +161,7 @@ export default function BloqueoHorario() {
               user_id: c.doctors.user_id,
               tipo: 'bloqueo_horario',
               titulo: 'Bloqueo de horario en tu pabellón',
-              mensaje: `Se bloqueó el pabellón el ${data.fecha} de ${bloqueoIni.slice(0,5)} a ${bloqueoFin.slice(0,5)}${data.motivo ? ` (${data.motivo})` : ''}. Tu cirugía de ${c.patients?.nombre || ''} ${c.patients?.apellido || ''} podría verse afectada.`,
+              mensaje: `Se bloqueó el pabellón el ${String(data.fecha).substring(0,10)} de ${bloqueoIni.slice(0,5)} a ${bloqueoFin.slice(0,5)}${data.motivo ? ` (${sanitizeString(String(data.motivo)).substring(0, 100)})` : ''}. Tu cirugía de ${sanitizeString(String(c.patients?.nombre || ''))} ${sanitizeString(String(c.patients?.apellido || ''))} podría verse afectada.`,
               relacionado_con: c.id,
             })
             if (notifErr) logger.warn('Error al notificar bloqueo al doctor:', notifErr)

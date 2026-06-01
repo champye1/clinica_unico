@@ -26,14 +26,15 @@ export function clearAllAppData() {
     localStorage.removeItem('onboarding_medico_completed')
 
     // Limpiar tokens de sesión de Supabase (formato: sb-<project-ref>-auth-token)
-    const keysToRemove = []
+    // IMPORTANTE: recopilar todas las keys ANTES de eliminar (iterar mientras se borra desplaza índices)
+    const allKeys = []
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i)
-      if (key && (key.startsWith('sb-') && key.endsWith('-auth-token'))) {
-        keysToRemove.push(key)
-      }
+      if (key) allKeys.push(key)
     }
-    keysToRemove.forEach(k => localStorage.removeItem(k))
+    allKeys
+      .filter(k => k.startsWith('sb-') && k.endsWith('-auth-token'))
+      .forEach(k => localStorage.removeItem(k))
 
   } catch (error) {
     logger.errorWithContext('Error al limpiar datos de almacenamiento', error)

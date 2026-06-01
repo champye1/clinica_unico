@@ -6,8 +6,8 @@
 
 import { PREVISION_LABELS } from './previsionConfig'
 
-/** Enmascara RUT para exportación: muestra solo últimos 4 caracteres. Ej: ****.***.678-9 */
-function maskRut(rut) {
+/** Enmascara RUT: muestra solo los últimos 4 caracteres. Ej: ****.***.678-9 */
+export function maskRut(rut) {
   if (!rut) return '—'
   const clean = String(rut).replace(/\./g, '')
   if (clean.length <= 4) return clean

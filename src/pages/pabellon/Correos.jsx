@@ -164,13 +164,17 @@ export default function Correos() {
     onError: () => showError('Error al guardar la configuración de WhatsApp.'),
   })
 
+  const NOTAS_MAX_LENGTH = 2000
+
   const ejecutarPollManual = async () => {
     setPollingManual(true)
+    const timeout = setTimeout(() => setPollingManual(false), 30000)
     try {
       const { data: { session } } = await supabase.auth.getSession()
       const { data, error } = await supabase.functions.invoke('poll-gmail', {
         headers: { Authorization: `Bearer ${session.access_token}` },
       })
+      clearTimeout(timeout)
       if (error) throw error
       if (data?.inserted > 0) {
         showSuccess(`Se importaron ${data.inserted} mensaje(s) nuevo(s).`)
@@ -260,9 +264,10 @@ export default function Correos() {
   const guardarNotas = async (id) => {
     setGuardandoNotas(true)
     try {
+      const notasLimpias = sanitizeString(notasEditando, { maxLength: NOTAS_MAX_LENGTH })
       const { error } = await supabase
         .from('external_messages')
-        .update({ notas_internas: notasEditando })
+        .update({ notas_internas: notasLimpias || null })
         .eq('id', id)
       if (error) throw error
       queryClient.invalidateQueries({ queryKey: ['external-messages'] })
@@ -297,7 +302,8 @@ export default function Correos() {
     }
     setEnviandoReply(true)
     try {
-      const html = `<p>${replyText.trim().replace(/\n/g, '<br/>')}</p>
+      const escRe = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      const html = `<p>${escRe(replyText.trim()).replace(/\n/g, '<br/>')}</p>
         <hr style="margin:16px 0;border:none;border-top:1px solid #e2e8f0"/>
         <p style="color:#94a3b8;font-size:12px">Portal Clínico — Respuesta enviada desde la bandeja de correos</p>`
       const { error } = await supabase.functions.invoke('send-email', {
@@ -604,7 +610,7 @@ export default function Correos() {
                         <button
                           type="button"
                           className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition-colors"
-                          onClick={e => { e.stopPropagation(); setReplyModal({ to: m.email_remitente, subject: m.asunto, mensajeId: m.id }); setReplyText('') }}
+                          onClick={e => { e.stopPropagation(); setReplyText(''); setReplyModal({ to: m.email_remitente, subject: m.asunto, mensajeId: m.id }) }}
                         >
                           <Mail className="w-3.5 h-3.5" /> Responder por email
                         </button>

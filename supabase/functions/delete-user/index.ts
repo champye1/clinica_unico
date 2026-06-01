@@ -79,16 +79,19 @@ serve(async (req) => {
 
       if (doctorData) {
         const doctorId = doctorData.id
-        const [{ count: p }, { count: r }, { count: s }] = await Promise.all([
+        const results = await Promise.allSettled([
           supabaseAdmin.from('patients').select('*', { count: 'exact', head: true }).eq('doctor_id', doctorId),
           supabaseAdmin.from('surgery_requests').select('*', { count: 'exact', head: true }).eq('doctor_id', doctorId),
           supabaseAdmin.from('surgeries').select('*', { count: 'exact', head: true }).eq('doctor_id', doctorId),
         ])
-        if (((p ?? 0) > 0 || (r ?? 0) > 0 || (s ?? 0) > 0) && !force) {
+        const p = results[0].status === 'fulfilled' ? (results[0].value.count ?? 0) : 0
+        const r = results[1].status === 'fulfilled' ? (results[1].value.count ?? 0) : 0
+        const s = results[2].status === 'fulfilled' ? (results[2].value.count ?? 0) : 0
+        if ((p > 0 || r > 0 || s > 0) && !force) {
           return json({
             success: false,
             error: 'El usuario tiene datos relacionados. Envíe force: true para confirmar la eliminación.',
-            details: { pacientes: p ?? 0, solicitudes: r ?? 0, cirugias: s ?? 0 },
+            details: { pacientes: p, solicitudes: r, cirugias: s },
           }, 409, corsHeaders)
         }
       }

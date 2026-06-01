@@ -70,6 +70,12 @@ export default function Solicitudes() {
       if (slotStr && solicitudStr) {
         const slot = JSON.parse(slotStr)
         const solicitud = JSON.parse(solicitudStr)
+        // Validar que solicitud.id sea UUID antes de usar
+        if (solicitud?.id && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(solicitud.id)) {
+          sessionStorage.removeItem('solicitud_gestionando')
+          sessionStorage.removeItem('slot_seleccionado')
+          return
+        }
         setSolicitudProgramando(solicitud)
         setFormProgramacion({
           fecha: format(new Date(slot.date), 'yyyy-MM-dd'),
@@ -105,6 +111,7 @@ export default function Solicitudes() {
         `)
         .is('deleted_at', null)
         .order('created_at', { ascending: false })
+        .limit(500)
       if (filtroEstado !== 'todas') query = query.eq('estado', filtroEstado)
       const { data, error } = await query
       if (error) throw error
@@ -256,6 +263,8 @@ export default function Solicitudes() {
     }
   }
 
+  const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+
   const enviarEmail = (solicitud, tipo) => {
     const esAceptada = tipo === 'aceptada'
     const nombreDoctor = solicitud.doctors ? `${solicitud.doctors.nombre} ${solicitud.doctors.apellido}` : null
@@ -266,21 +275,21 @@ export default function Solicitudes() {
 
     if (solicitud.doctors?.email) {
       const subject = esAceptada
-        ? `Cirugía programada — ${nombrePaciente || 'su paciente'}`
-        : `Solicitud rechazada — ${nombrePaciente || 'su paciente'}`
+        ? `Cirugía programada — ${esc(nombrePaciente || 'su paciente')}`
+        : `Solicitud rechazada — ${esc(nombrePaciente || 'su paciente')}`
       const html = esAceptada
         ? `<h2 style="color:#1e40af">Solicitud de cirugía ACEPTADA ✅</h2>
-           <p>Estimado/a Dr/a. <strong>${nombreDoctor}</strong>,</p>
+           <p>Estimado/a Dr/a. <strong>${esc(nombreDoctor)}</strong>,</p>
            <p>Su solicitud quirúrgica ha sido <strong>aceptada y programada</strong>.</p>
-           ${nombrePaciente ? `<p><strong>Paciente:</strong> ${nombrePaciente}</p>` : ''}
-           ${fechaCirugia ? `<p><strong>Fecha programada:</strong> ${fechaCirugia}</p>` : ''}
-           ${solicitud.observaciones ? `<p><strong>Observaciones:</strong> ${solicitud.observaciones}</p>` : ''}
+           ${nombrePaciente ? `<p><strong>Paciente:</strong> ${esc(nombrePaciente)}</p>` : ''}
+           ${fechaCirugia ? `<p><strong>Fecha programada:</strong> ${esc(fechaCirugia)}</p>` : ''}
+           ${solicitud.observaciones ? `<p><strong>Observaciones:</strong> ${esc(solicitud.observaciones)}</p>` : ''}
            <p style="color:#6b7280;font-size:12px">Portal Clínico — Mensaje automático</p>`
         : `<h2 style="color:#dc2626">Solicitud de cirugía RECHAZADA ❌</h2>
-           <p>Estimado/a Dr/a. <strong>${nombreDoctor}</strong>,</p>
+           <p>Estimado/a Dr/a. <strong>${esc(nombreDoctor)}</strong>,</p>
            <p>Su solicitud quirúrgica <strong>no pudo ser aceptada</strong> en este momento.</p>
-           ${nombrePaciente ? `<p><strong>Paciente:</strong> ${nombrePaciente}</p>` : ''}
-           ${solicitud.motivo_rechazo ? `<p><strong>Motivo:</strong> ${solicitud.motivo_rechazo}</p>` : ''}
+           ${nombrePaciente ? `<p><strong>Paciente:</strong> ${esc(nombrePaciente)}</p>` : ''}
+           ${solicitud.motivo_rechazo ? `<p><strong>Motivo:</strong> ${esc(solicitud.motivo_rechazo)}</p>` : ''}
            <p>Para más información comuníquese directamente con el equipo de pabellón.</p>
            <p style="color:#6b7280;font-size:12px">Portal Clínico — Mensaje automático</p>`
       supabase.functions.invoke('send-email', { body: { to: solicitud.doctors.email, subject, html } })
@@ -593,7 +602,8 @@ export default function Solicitudes() {
     } catch (error) {
       showError('No se pudo notificar al doctor: ' + (error.message || error.toString() || 'Error desconocido'))
     }
-    sessionStorage.setItem('reagendar_solicitud_id', solicitud.id)
+    const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    if (UUID_REGEX.test(solicitud.id)) sessionStorage.setItem('reagendar_solicitud_id', solicitud.id)
     navigate('/pabellon/calendario', { state: { reagendar: true, surgeryRequestId: solicitud.id } })
   }
 
