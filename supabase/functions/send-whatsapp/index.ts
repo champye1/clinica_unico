@@ -84,8 +84,22 @@ serve(async (req) => {
       })
     }
 
+    // Validar tipo y destinatario contra valores permitidos (previene inyección de contenido)
+    const TIPOS_VALIDOS = ['aceptada', 'rechazada']
+    const DESTINATARIOS_VALIDOS = ['doctor', 'paciente']
+    if (!TIPOS_VALIDOS.includes(tipo as string)) {
+      return new Response(JSON.stringify({ error: 'Tipo inválido. Debe ser: aceptada o rechazada.' }), {
+        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+    if (!DESTINATARIOS_VALIDOS.includes(destinatario as string)) {
+      return new Response(JSON.stringify({ error: 'Destinatario inválido. Debe ser: doctor o paciente.' }), {
+        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
     // Normalizar y validar formato E.164
-    const telefono = to.replace(/\s/g, '')
+    const telefono = (to as string).replace(/\s/g, '')
     if (!/^\+[1-9]\d{7,14}$/.test(telefono)) {
       return new Response(JSON.stringify({ error: 'Número de teléfono inválido. Use formato +56912345678.' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },

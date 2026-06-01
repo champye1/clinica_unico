@@ -6,6 +6,22 @@
 
 import { PREVISION_LABELS } from './previsionConfig'
 
+/** Enmascara RUT para exportación: muestra solo últimos 4 caracteres. Ej: ****.***.678-9 */
+function maskRut(rut) {
+  if (!rut) return '—'
+  const clean = String(rut).replace(/\./g, '')
+  if (clean.length <= 4) return clean
+  return '***.' + clean.slice(-7, -4).replace(/(\d{3})/, '$1.') + clean.slice(-4)
+}
+
+/** Enmascara teléfono: muestra solo últimos 4 dígitos. Ej: +569****5678 */
+function maskTelefono(tel) {
+  if (!tel) return '—'
+  const s = String(tel).replace(/\s/g, '')
+  if (s.length <= 4) return s
+  return s.slice(0, -4).replace(/\d/g, '*') + s.slice(-4)
+}
+
 /**
  * Exporta una solicitud quirúrgica como PDF con jsPDF + autotable
  * @param {Object} solicitud - objeto completo de la solicitud con relations
@@ -51,9 +67,9 @@ export async function exportSolicitudPDF(solicitud) {
     columnStyles: { 0: { cellWidth: 45, fontStyle: 'bold' } },
     body: [
       ['Nombre completo', `${solicitud.patients?.nombre || ''} ${solicitud.patients?.apellido || ''}`],
-      ['RUT', solicitud.patients?.rut || '—'],
+      ['RUT', maskRut(solicitud.patients?.rut)],
       ['Previsión de Salud', previsionLabel],
-      ['Teléfono', solicitud.patients?.telefono || '—'],
+      ['Teléfono', maskTelefono(solicitud.patients?.telefono)],
     ],
   })
 

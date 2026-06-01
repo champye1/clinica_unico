@@ -68,8 +68,18 @@ export default function ModalImportarMedicos({ onClose, onSuccess }) {
   const [results, setResults] = useState(null)
   const [dragOver, setDragOver] = useState(false)
 
+  const MAX_CSV_SIZE = 500 * 1024 // 500 KB
+
   const handleFile = (file) => {
     if (!file) return
+    if (file.size > MAX_CSV_SIZE) {
+      alert(`El archivo es demasiado grande (${(file.size / 1024).toFixed(0)} KB). Máximo permitido: 500 KB.`)
+      return
+    }
+    if (!file.name.toLowerCase().endsWith('.csv')) {
+      alert('Solo se aceptan archivos .csv')
+      return
+    }
     const reader = new FileReader()
     reader.onload = (e) => {
       const parsed = parseCsv(e.target.result)

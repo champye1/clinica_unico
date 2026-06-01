@@ -33,9 +33,15 @@ export default defineConfig({
         navigateFallbackDenylist: [/^\/api/],
         runtimeCaching: [
           {
-            urlPattern: /^https:\/\/.*\.supabase\.co\/.*/i,
-            handler: 'NetworkFirst',
-            options: { cacheName: 'supabase-cache', networkTimeoutSeconds: 10 },
+            // Solo cachear assets estáticos de Supabase Storage, NO las APIs REST/Auth
+            // para evitar que datos de sesión de un usuario queden cacheados para otro
+            urlPattern: /^https:\/\/.*\.supabase\.co\/storage\/.*/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'supabase-storage-cache',
+              networkTimeoutSeconds: 10,
+              expiration: { maxEntries: 50, maxAgeSeconds: 3600 },
+            },
           },
         ],
       },
@@ -70,6 +76,7 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'jsdom',
+    pool: 'forks',
     setupFiles: './src/__tests__/setup.js',
     include: ['src/**/*.{test,spec}.{js,jsx,ts,tsx}'],
     coverage: {

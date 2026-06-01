@@ -42,8 +42,7 @@ serve(async (req) => {
                       Deno.env.get('SUPABASE_PROJECT_URL') ||
                       Deno.env.get('SUPABASE_PROJECT_REF') || ''
 
-    let supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ||
-                             Deno.env.get('SUPABASE_ANON_KEY') || ''
+    let supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
 
     if (!supabaseUrl) {
       const projectRef = Deno.env.get('SUPABASE_PROJECT_REF')

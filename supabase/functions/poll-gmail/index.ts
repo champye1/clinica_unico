@@ -105,6 +105,18 @@ interface ParsedEmail {
   urgencia: 'urgente' | 'normal' | 'electiva'
 }
 
+/** Sanitiza un string externo antes de guardar en BD: elimina control chars y tags HTML */
+function sanitizeExternal(s: string | null): string | null {
+  if (!s) return null
+  return s
+    .replace(/[\x00-\x1F\x7F]/g, '')
+    .replace(/<[^>]*>/g, '')
+    .replace(/\bon\w+\s*=/gi, '')
+    .replace(/javascript\s*:/gi, '')
+    .trim()
+    .substring(0, 500) || null
+}
+
 /** Intenta extraer datos clínicos del cuerpo del email con regex */
 function extractClinicalData(body: string): {
   nombrePaciente: string | null
@@ -288,14 +300,14 @@ serve(async (req) => {
           .insert({
             gmail_message_id: parsed.gmailMessageId,
             fuente: 'gmail',
-            nombre_remitente: parsed.from,
+            nombre_remitente: sanitizeExternal(parsed.from),
             email_remitente: parsed.fromEmail,
-            telefono_remitente: parsed.telefono,
-            asunto: parsed.subject,
-            mensaje: parsed.body.substring(0, 2000),
-            nombre_paciente: parsed.nombrePaciente,
-            rut_paciente: parsed.rutPaciente,
-            tipo_cirugia: parsed.tipoCirugia,
+            telefono_remitente: sanitizeExternal(parsed.telefono),
+            asunto: sanitizeExternal(parsed.subject) ?? '(Sin asunto)',
+            mensaje: sanitizeExternal(parsed.body.substring(0, 2000)),
+            nombre_paciente: sanitizeExternal(parsed.nombrePaciente),
+            rut_paciente: sanitizeExternal(parsed.rutPaciente),
+            tipo_cirugia: sanitizeExternal(parsed.tipoCirugia),
             urgencia: parsed.urgencia,
             leido: false,
           })

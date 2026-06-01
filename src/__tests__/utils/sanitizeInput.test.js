@@ -29,14 +29,15 @@ describe('sanitizeString', () => {
     expect(sanitizeString('abc\x1Fdef')).toBe('abcdef')
   })
 
-  it('removes dangerous SQL keywords', () => {
-    expect(sanitizeString('DROP TABLE users')).not.toContain('DROP')
-    expect(sanitizeString('SELECT * FROM')).toBe('SELECT * FROM') // SELECT is not in the blocklist
-    expect(sanitizeString('DELETE FROM tabla')).not.toContain('DELETE')
+  it('preserves SQL keywords — la protección SQL real es responsabilidad del backend con queries parametrizadas', () => {
+    // sanitizeString ya no elimina keywords SQL para evitar mutar inputs legítimos como
+    // "Borrar archivo", "Insertar paciente", etc. Supabase usa queries parametrizadas.
+    expect(sanitizeString('DROP TABLE users')).toBe('DROP TABLE users')
+    expect(sanitizeString('DELETE FROM tabla')).toBe('DELETE FROM tabla')
   })
 
-  it('removes SQL comment sequences', () => {
-    expect(sanitizeString("' OR 1=1 -- comment")).not.toContain('--')
+  it('preserves -- (comentario SQL) — Supabase parametriza los valores, no hay riesgo', () => {
+    expect(sanitizeString("' OR 1=1 -- comment")).toBe("' OR 1=1 -- comment")
   })
 
   it('preserves & < > characters — React escapes them at render time', () => {
