@@ -88,6 +88,8 @@ function AppContent() {
   }, [])
 
   const fetchUserRole = async (userId) => {
+    // Timeout de 10s para evitar loading infinito si la query cuelga
+    const timeoutId = setTimeout(() => setLoading(false), 10000)
     try {
       const { data, error } = await supabase
         .from('users')
@@ -125,8 +127,6 @@ function AppContent() {
       }
     } catch (error) {
       logger.errorWithContext('Error fetching user role', error)
-      
-      // Manejar sesión expirada en catch también
       if (error.status === 401 || error.message?.includes('JWT') || error.message?.includes('expired')) {
         logger.warn('Sesión expirada. Redirigiendo al login...')
         await supabase.auth.signOut()
@@ -136,6 +136,7 @@ function AppContent() {
         setUserRole(null)
       }
     } finally {
+      clearTimeout(timeoutId)
       setLoading(false)
     }
   }
