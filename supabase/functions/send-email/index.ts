@@ -150,7 +150,7 @@ serve(async (req) => {
     const gmailEmail        = cfg.email         || Deno.env.get('GMAIL_FROM_EMAIL')    || ''
 
     if (!gmailClientId || !gmailClientSecret || !gmailRefreshToken || !gmailEmail) {
-      return json({ error: 'Gmail no configurado. Ve a Correos → Configurar Gmail.' }, 500, CORS_HEADERS)
+      return json({ configured: false, message: 'Gmail no configurado.' }, 200, CORS_HEADERS)
     }
 
     // Validar body

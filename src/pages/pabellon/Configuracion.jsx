@@ -284,7 +284,7 @@ export default function Configuracion() {
   const labelClass = `block text-[10px] font-black uppercase tracking-widest mb-1.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`
 
   return (
-    <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-xl mx-auto">
+    <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-xl mx-auto space-y-4">
       <div className="mb-8">
         <h2 className={`text-2xl lg:text-3xl font-black tracking-tighter uppercase ${isDark ? 'text-white' : 'text-slate-900'}`}>
           Configuración

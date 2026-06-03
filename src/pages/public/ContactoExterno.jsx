@@ -77,7 +77,7 @@ export default function ContactoExterno() {
       try {
         const { data: pabellonUsers } = await supabase
           .from('users')
-          .select('id')
+          .select('id, email')
           .eq('role', 'pabellon')
           .is('deleted_at', null)
         if (pabellonUsers?.length) {
@@ -90,13 +90,36 @@ export default function ContactoExterno() {
               relacionado_con: null,
             }))
           )
+          // Email a cada usuario de pabellón que tenga correo registrado
+          const escLocal = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+          const urgenciaLabel = { electiva: 'Electiva', normal: 'Normal', urgente: '⚠️ URGENTE' }[form.urgencia] || form.urgencia
+          const htmlAdmin = `
+            <h2 style="color:#1e40af;margin-bottom:8px">Nueva solicitud de contacto</h2>
+            <table style="border-collapse:collapse;font-size:14px">
+              <tr><td style="padding:4px 8px;color:#64748b;white-space:nowrap">Nombre</td><td style="padding:4px 8px;font-weight:600">${escLocal(form.nombre)}</td></tr>
+              ${form.email.trim() ? `<tr><td style="padding:4px 8px;color:#64748b">Email</td><td style="padding:4px 8px">${escLocal(form.email)}</td></tr>` : ''}
+              ${form.telefono.trim() ? `<tr><td style="padding:4px 8px;color:#64748b">Teléfono</td><td style="padding:4px 8px">${escLocal(form.telefono)}</td></tr>` : ''}
+              <tr><td style="padding:4px 8px;color:#64748b">Urgencia</td><td style="padding:4px 8px">${urgenciaLabel}</td></tr>
+              ${form.tipo_cirugia.trim() ? `<tr><td style="padding:4px 8px;color:#64748b">Procedimiento</td><td style="padding:4px 8px">${escLocal(form.tipo_cirugia)}</td></tr>` : ''}
+            </table>
+            <hr style="margin:12px 0;border:none;border-top:1px solid #e2e8f0"/>
+            <p style="color:#334155;white-space:pre-wrap">${escLocal(form.mensaje)}</p>`
+          const emailSubject = `Nueva solicitud${form.urgencia === 'urgente' ? ' ⚠️ URGENTE' : ''}: ${asunto}`
+          await Promise.allSettled(
+            pabellonUsers
+              .filter(u => u.email)
+              .map(u => supabase.functions.invoke('send-email', {
+                body: { to: u.email, subject: emailSubject, html: htmlAdmin },
+              }))
+          )
         }
       } catch { /* no bloquear el flujo */ }
 
-      // Email de confirmación si tiene correo
+      const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+
+      // Email de confirmación al solicitante
       if (form.email.trim()) {
         try {
-          const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
           const clinicaNombre = esc(clinicInfo?.nombre || 'la clínica')
           const html = `
             <h2 style="color:#1e40af;margin-bottom:8px">Hemos recibido su solicitud ✅</h2>
@@ -112,6 +135,7 @@ export default function ContactoExterno() {
           })
         } catch { /* no bloquear */ }
       }
+
 
       setEnviado(true)
     } catch {
