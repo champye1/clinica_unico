@@ -1,9 +1,9 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import {
   Calendar, Users, Package, Bell, CheckCircle, ArrowRight, Shield,
   Clock, ChevronRight, Mail, Stethoscope, ClipboardList, BarChart3,
-  Zap, X, ChevronDown, ChevronUp, FileText, MessageSquare, Star,
+  Zap, X, ChevronDown, ChevronUp, FileText, MessageSquare, Star, Eye,
 } from 'lucide-react'
 
 const FEATURES = [
@@ -12,36 +12,48 @@ const FEATURES = [
     title: 'Agenda quirúrgica',
     description: 'Calendario visual por pabellón con vistas diaria, semanal y anual. Detecta solapamientos y gestiona bloqueos en tiempo real.',
     color: 'bg-blue-50 text-blue-600',
+    preview: '/previews/agenda-quirurgica.png',
+    previewCaption: 'Calendario de pabellones con vista diaria, semanal y anual',
   },
   {
     icon: Users,
     title: 'Portal del médico',
     description: 'Cada cirujano tiene su propio acceso para solicitar procedimientos, ver el estado de sus cirugías y recibir notificaciones al instante.',
     color: 'bg-indigo-50 text-indigo-600',
+    preview: '/previews/portal-medico.png',
+    previewCaption: 'Panel del médico con solicitudes, calendario personal y notificaciones',
   },
   {
     icon: Package,
     title: 'Control de insumos',
     description: 'Stock en tiempo real con alertas de mínimo. Registro de movimientos de entrada y salida. Exportación a Excel y PDF.',
     color: 'bg-emerald-50 text-emerald-600',
+    preview: '/previews/control-insumos.png',
+    previewCaption: 'Inventario en tiempo real con alertas de stock mínimo',
   },
   {
     icon: Bell,
     title: 'Notificaciones automáticas',
     description: 'El médico recibe confirmación al aceptar su cirugía vía WhatsApp o email. Sin llamadas, sin mensajes manuales.',
     color: 'bg-amber-50 text-amber-600',
+    preview: '/previews/notificaciones.png',
+    previewCaption: 'Notificaciones automáticas por WhatsApp y email al aceptar o rechazar',
   },
   {
     icon: ClipboardList,
     title: 'Auditoría completa',
     description: 'Registro de cada acción: quién programó, cuándo y qué cambió. Trazabilidad total para cumplimiento normativo MINSAL.',
     color: 'bg-rose-50 text-rose-600',
+    preview: '/previews/auditoria.png',
+    previewCaption: 'Log de auditoría con cada acción registrada por usuario y fecha',
   },
   {
     icon: BarChart3,
     title: 'Reportes y estadísticas',
     description: 'Dashboard ejecutivo en tiempo real. Exporta reportes de cirugías, ocupación de pabellones e inventario en PDF con tu logo.',
     color: 'bg-violet-50 text-violet-600',
+    preview: '/previews/estadisticas.png',
+    previewCaption: 'Dashboard ejecutivo con gráficos de ocupación y estadísticas mensuales',
   },
 ]
 
@@ -126,6 +138,82 @@ const FAQS = [
   },
 ]
 
+function FeatureModal({ feature, onClose }) {
+  const [imgError, setImgError] = useState(false)
+
+  const handleKey = useCallback((e) => {
+    if (e.key === 'Escape') onClose()
+  }, [onClose])
+
+  useEffect(() => {
+    document.addEventListener('keydown', handleKey)
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.removeEventListener('keydown', handleKey)
+      document.body.style.overflow = ''
+    }
+  }, [handleKey])
+
+  if (!feature) return null
+
+  const Icon = feature.icon
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-in fade-in duration-200"
+      onClick={onClose}
+    >
+      <div
+        className="relative bg-white rounded-3xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden animate-in zoom-in-95 duration-200"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+          <div className="flex items-center gap-3">
+            <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${feature.color}`}>
+              <Icon className="w-4 h-4" aria-hidden="true" />
+            </div>
+            <div>
+              <h3 className="font-black text-slate-900 text-sm">{feature.title}</h3>
+              <p className="text-slate-500 text-xs">{feature.previewCaption}</p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+            aria-label="Cerrar"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Preview image */}
+        <div className="overflow-y-auto max-h-[calc(90vh-80px)] bg-slate-50">
+          {imgError ? (
+            <div className="flex flex-col items-center justify-center py-20 px-8 text-center">
+              <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mb-4 ${feature.color}`}>
+                <Icon className="w-8 h-8" aria-hidden="true" />
+              </div>
+              <p className="font-bold text-slate-700 mb-2">{feature.title}</p>
+              <p className="text-slate-500 text-sm max-w-sm">{feature.description}</p>
+              <p className="text-slate-400 text-xs mt-6">
+                Captura de pantalla próximamente disponible.
+              </p>
+            </div>
+          ) : (
+            <img
+              src={feature.preview}
+              alt={`Vista previa de ${feature.title}`}
+              className="w-full object-contain"
+              onError={() => setImgError(true)}
+            />
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function FaqItem({ q, a }) {
   const [open, setOpen] = useState(false)
   return (
@@ -149,6 +237,8 @@ function FaqItem({ q, a }) {
 const YEAR = new Date().getFullYear()
 
 export default function LandingPage() {
+  const [previewFeature, setPreviewFeature] = useState(null)
+
   return (
     <div className="min-h-screen bg-white font-sans">
 
@@ -252,13 +342,21 @@ export default function LandingPage() {
           </div>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {FEATURES.map((f) => (
-              <div key={f.title} className="p-6 rounded-2xl border border-slate-100 hover:border-blue-200 hover:shadow-md transition-all group">
+              <button
+                key={f.title}
+                onClick={() => setPreviewFeature(f)}
+                className="p-6 rounded-2xl border border-slate-100 hover:border-blue-200 hover:shadow-md transition-all group text-left cursor-pointer w-full"
+              >
                 <div className={`w-11 h-11 rounded-xl flex items-center justify-center mb-4 ${f.color}`}>
                   <f.icon className="w-5 h-5" aria-hidden="true" />
                 </div>
                 <h3 className="font-bold text-slate-900 mb-2">{f.title}</h3>
-                <p className="text-slate-500 text-sm leading-relaxed">{f.description}</p>
-              </div>
+                <p className="text-slate-500 text-sm leading-relaxed mb-4">{f.description}</p>
+                <span className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-600 group-hover:text-blue-700 transition-colors">
+                  <Eye className="w-3.5 h-3.5" aria-hidden="true" />
+                  Ver pantalla
+                </span>
+              </button>
             ))}
           </div>
         </div>
@@ -551,6 +649,11 @@ export default function LandingPage() {
           </p>
         </div>
       </section>
+
+      {/* ── MODAL PREVIEW FEATURE ── */}
+      {previewFeature && (
+        <FeatureModal feature={previewFeature} onClose={() => setPreviewFeature(null)} />
+      )}
 
       {/* ── FOOTER ── */}
       <footer className="bg-slate-950 py-12 px-4 sm:px-6">
