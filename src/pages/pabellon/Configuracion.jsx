@@ -284,7 +284,7 @@ export default function Configuracion() {
   const labelClass = `block text-[10px] font-black uppercase tracking-widest mb-1.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`
 
   return (
-    <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-xl mx-auto space-y-4">
+    <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-xl mx-auto space-y-6">
       <div className="mb-8">
         <h2 className={`text-2xl lg:text-3xl font-black tracking-tighter uppercase ${isDark ? 'text-white' : 'text-slate-900'}`}>
           Configuración
@@ -295,7 +295,7 @@ export default function Configuracion() {
       </div>
 
       {/* ── Información de la Clínica ── */}
-      <Card className="p-6 space-y-5">
+      <Card hover={false} className="p-6 space-y-5">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center">
             <Building2 size={20} className="text-blue-600" />
@@ -411,7 +411,7 @@ export default function Configuracion() {
       </Card>
 
       {/* ── WhatsApp Business ── */}
-      <Card className="p-6 space-y-6">
+      <Card hover={false} className="p-6 space-y-6">
         {/* Header de sección */}
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center">
@@ -536,7 +536,7 @@ export default function Configuracion() {
       </Card>
 
       {/* ── Exportar datos ── */}
-      <Card className="p-6 space-y-4">
+      <Card hover={false} className="p-6 space-y-4">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center">
             <Database size={20} className="text-slate-600" />
@@ -566,7 +566,7 @@ export default function Configuracion() {
       </Card>
 
       {/* ── Recordatorios de cirugía ── */}
-      <Card className="p-6 space-y-5">
+      <Card hover={false} className="p-6 space-y-5">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center">
             <Bell size={20} className="text-amber-600" />
@@ -633,7 +633,7 @@ export default function Configuracion() {
       </Card>
 
       {/* Documentos */}
-      <Card>
+      <Card hover={false}>
         <div className="flex items-center gap-3 mb-5">
           <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isDark ? 'bg-slate-700' : 'bg-indigo-50'}`}>
             <FileSignature size={20} className={isDark ? 'text-indigo-400' : 'text-indigo-600'} />
