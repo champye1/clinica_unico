@@ -12,7 +12,7 @@ const getAllowedOrigin = () => {
 
 const getCorsHeaders = (origin: string | null) => {
   const allowedOrigins = getAllowedOrigin()
-  const originHeader = origin && allowedOrigins.includes(origin) ? origin : (allowedOrigins[0] || '*')
+  const originHeader = (origin && Array.isArray(allowedOrigins) && allowedOrigins.includes(origin)) ? origin : '*'
   return {
     'Access-Control-Allow-Origin': originHeader,
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',

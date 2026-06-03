@@ -17,7 +17,7 @@ const GMAIL_API_BASE  = 'https://gmail.googleapis.com/gmail/v1/users/me'
 
 function getCorsHeaders(origin: string | null): Record<string, string> {
   const allowed = Deno.env.get('ALLOWED_ORIGINS')?.split(',').map(s => s.trim()) ?? []
-  const allowOrigin = allowed.length > 0 && origin && allowed.includes(origin) ? origin : (allowed[0] ?? '*')
+  const allowOrigin = (allowed.length > 0 && origin && allowed.includes(origin)) ? origin : '*'
   return {
     'Access-Control-Allow-Origin': allowOrigin,
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
