@@ -7,7 +7,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 // El cifrado ocurre en PostgreSQL con pgcrypto + clave maestra server-side.
 //
 // POST body: { key: string, value: Record<string, unknown> }
-// key: 'gmail_config' | 'whatsapp_config'
+// key: 'gmail_config' | 'whatsapp_config' | 'facturacion_config'
 // =====================================================
 
 function getCorsHeaders(origin: string | null): Record<string, string> {
@@ -24,7 +24,7 @@ function json(body: unknown, status: number, cors: Record<string, string>): Resp
   return new Response(JSON.stringify(body), { status, headers: { ...cors, 'Content-Type': 'application/json' } })
 }
 
-const ALLOWED_KEYS = ['gmail_config', 'whatsapp_config']
+const ALLOWED_KEYS = ['gmail_config', 'whatsapp_config', 'facturacion_config']
 
 serve(async (req) => {
   const origin = req.headers.get('origin')

@@ -1,7 +1,7 @@
 ﻿import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../../config/supabase'
-import { MessageSquare, Save, CheckCircle2, AlertTriangle, Phone, Wifi, WifiOff, Building2, Bell, Play, Download, Database, FileSignature, BookOpen } from 'lucide-react'
+import { MessageSquare, Save, CheckCircle2, AlertTriangle, Phone, Wifi, WifiOff, Building2, Bell, Play, Download, Database, FileSignature, BookOpen, Receipt, Eye, EyeOff } from 'lucide-react'
 import { useTheme } from '../../contexts/ThemeContext'
 import { useNotifications } from '../../hooks/useNotifications'
 import { sanitizeString } from '../../utils/sanitizeInput'
@@ -11,7 +11,8 @@ import { useClinicInfo, useSaveClinicInfo, CLINIC_INFO_DEFAULTS } from '../../ho
 import { logger } from '../../utils/logger'
 import { exportContratoPDF, exportManualPDF } from '../../utils/exportData'
 
-const WHATSAPP_KEY = 'whatsapp_config'
+const WHATSAPP_KEY      = 'whatsapp_config'
+const FACTURACION_KEY   = 'facturacion_config'
 
 export default function Configuracion() {
   const { theme } = useTheme()
@@ -45,6 +46,48 @@ export default function Configuracion() {
   const [diasRecordatorio, setDiasRecordatorio] = useState(1)
   const [enviandoRecordatorios, setEnviandoRecordatorios] = useState(false)
   const [resultadoRecordatorio, setResultadoRecordatorio] = useState(null)
+
+  // Facturación electrónica
+  const [factForm, setFactForm] = useState({
+    api_key: '', rut_emisor: '', razon_social: '', giro: '', direccion: '', comuna: '', sandbox: true,
+  })
+  const [factCargado, setFactCargado]     = useState(false)
+  const [factGuardando, setFactGuardando] = useState(false)
+  const [factResult, setFactResult]       = useState(null)
+  const [showApiKey, setShowApiKey]       = useState(false)
+
+  useEffect(() => {
+    if (factCargado) return
+    supabase.from('clinic_settings').select('value').eq('key', FACTURACION_KEY).maybeSingle()
+      .then(({ data }) => {
+        if (data?.value) setFactForm(v => ({ ...v, ...data.value }))
+        setFactCargado(true)
+      })
+  }, [factCargado])
+
+  const handleSaveFacturacion = async () => {
+    if (!factForm.api_key || !factForm.rut_emisor || !factForm.razon_social) {
+      showError('Completa API Key, RUT y Razón Social.')
+      return
+    }
+    setFactGuardando(true)
+    setFactResult(null)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const { data, error } = await supabase.functions.invoke('save-clinic-secret', {
+        body: { key: FACTURACION_KEY, value: factForm },
+        headers: { Authorization: `Bearer ${session?.access_token}` },
+      })
+      if (error || data?.error) throw new Error(data?.error || error?.message)
+      setFactResult('ok')
+      showSuccess('Configuración de facturación guardada.')
+    } catch (e) {
+      setFactResult('error')
+      showError(e.message || 'Error al guardar.')
+    } finally {
+      setFactGuardando(false)
+    }
+  }
 
   // Exportar datos completos
   const [exportando, setExportando] = useState(false)
@@ -630,6 +673,155 @@ export default function Configuracion() {
             }
           </div>
         )}
+      </Card>
+
+      {/* ── Facturación Electrónica ── */}
+      <Card hover={false} className="p-6 space-y-5">
+        <div className="flex items-center gap-3">
+          <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isDark ? 'bg-emerald-900/40' : 'bg-emerald-50'}`}>
+            <Receipt size={20} className={isDark ? 'text-emerald-400' : 'text-emerald-600'} />
+          </div>
+          <div>
+            <h3 className={`font-black text-sm uppercase tracking-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>
+              Facturación Electrónica
+            </h3>
+            <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+              Boletas y facturas via OpenFactura (Haulmer)
+            </p>
+          </div>
+        </div>
+
+        <div className={`flex items-start gap-3 rounded-xl p-4 border ${isDark ? 'bg-emerald-900/20 border-emerald-800 text-emerald-200' : 'bg-emerald-50 border-emerald-100 text-emerald-800'}`}>
+          <AlertTriangle size={16} className="shrink-0 mt-0.5" />
+          <p className="text-xs font-medium leading-relaxed">
+            Necesitas una cuenta en <strong>OpenFactura (openfactura.cl)</strong>. Activa el <strong>sandbox</strong> para pruebas gratuitas. Desactívalo cuando tu cliente empiece a emitir documentos reales.
+          </p>
+        </div>
+
+        <div className="space-y-3">
+          {/* API Key */}
+          <div>
+            <label className={`block text-xs font-bold mb-1.5 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+              API Key <span className="text-red-500">*</span>
+            </label>
+            <div className="relative">
+              <input
+                type={showApiKey ? 'text' : 'password'}
+                value={factForm.api_key}
+                onChange={e => setFactForm(v => ({ ...v, api_key: sanitizeString(e.target.value) }))}
+                placeholder="tu-api-key-de-openfactura"
+                className={`w-full px-4 py-2.5 pr-10 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isDark ? 'bg-slate-700 border-slate-600 text-white' : 'bg-white border-slate-200 text-slate-900'}`}
+              />
+              <button
+                type="button"
+                onClick={() => setShowApiKey(v => !v)}
+                className={`absolute right-3 top-1/2 -translate-y-1/2 ${isDark ? 'text-slate-400' : 'text-slate-400'}`}
+              >
+                {showApiKey ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+          </div>
+
+          {/* RUT Emisor + Razón Social */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={`block text-xs font-bold mb-1.5 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+                RUT Empresa <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={factForm.rut_emisor}
+                onChange={e => setFactForm(v => ({ ...v, rut_emisor: sanitizeString(e.target.value) }))}
+                placeholder="12345678-9"
+                maxLength={12}
+                className={`w-full px-3 py-2.5 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isDark ? 'bg-slate-700 border-slate-600 text-white' : 'bg-white border-slate-200 text-slate-900'}`}
+              />
+            </div>
+            <div>
+              <label className={`block text-xs font-bold mb-1.5 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+                Razón Social <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={factForm.razon_social}
+                onChange={e => setFactForm(v => ({ ...v, razon_social: sanitizeString(e.target.value) }))}
+                placeholder="Clínica Quirúrgica SpA"
+                maxLength={100}
+                className={`w-full px-3 py-2.5 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isDark ? 'bg-slate-700 border-slate-600 text-white' : 'bg-white border-slate-200 text-slate-900'}`}
+              />
+            </div>
+          </div>
+
+          {/* Giro */}
+          <div>
+            <label className={`block text-xs font-bold mb-1.5 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>Giro</label>
+            <input
+              type="text"
+              value={factForm.giro}
+              onChange={e => setFactForm(v => ({ ...v, giro: sanitizeString(e.target.value) }))}
+              placeholder="Servicios Médicos Quirúrgicos"
+              maxLength={80}
+              className={`w-full px-4 py-2.5 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isDark ? 'bg-slate-700 border-slate-600 text-white' : 'bg-white border-slate-200 text-slate-900'}`}
+            />
+          </div>
+
+          {/* Dirección + Comuna */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={`block text-xs font-bold mb-1.5 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>Dirección</label>
+              <input
+                type="text"
+                value={factForm.direccion}
+                onChange={e => setFactForm(v => ({ ...v, direccion: sanitizeString(e.target.value) }))}
+                placeholder="Av. Principal 123"
+                maxLength={80}
+                className={`w-full px-3 py-2.5 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isDark ? 'bg-slate-700 border-slate-600 text-white' : 'bg-white border-slate-200 text-slate-900'}`}
+              />
+            </div>
+            <div>
+              <label className={`block text-xs font-bold mb-1.5 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>Comuna</label>
+              <input
+                type="text"
+                value={factForm.comuna}
+                onChange={e => setFactForm(v => ({ ...v, comuna: sanitizeString(e.target.value) }))}
+                placeholder="Viña del Mar"
+                maxLength={50}
+                className={`w-full px-3 py-2.5 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isDark ? 'bg-slate-700 border-slate-600 text-white' : 'bg-white border-slate-200 text-slate-900'}`}
+              />
+            </div>
+          </div>
+
+          {/* Sandbox toggle */}
+          <div className={`flex items-center justify-between rounded-xl px-4 py-3 ${isDark ? 'bg-slate-700/50' : 'bg-slate-50'}`}>
+            <div>
+              <p className={`text-xs font-bold ${isDark ? 'text-white' : 'text-slate-800'}`}>Modo Sandbox</p>
+              <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Activado = documentos de prueba, no válidos ante el SII</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setFactForm(v => ({ ...v, sandbox: !v.sandbox }))}
+              className={`relative w-11 h-6 rounded-full transition-colors ${factForm.sandbox ? 'bg-emerald-500' : 'bg-slate-300'}`}
+            >
+              <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${factForm.sandbox ? 'translate-x-5' : 'translate-x-0.5'}`} />
+            </button>
+          </div>
+        </div>
+
+        {factResult && (
+          <div className={`flex items-center gap-2 text-xs font-bold rounded-xl px-4 py-3 ${
+            factResult === 'ok'
+              ? (isDark ? 'bg-emerald-900/30 text-emerald-400 border border-emerald-700' : 'bg-emerald-50 text-emerald-700 border border-emerald-200')
+              : (isDark ? 'bg-red-900/30 text-red-400 border border-red-700' : 'bg-red-50 text-red-700 border border-red-200')
+          }`}>
+            {factResult === 'ok' ? <CheckCircle2 size={14} /> : <AlertTriangle size={14} />}
+            {factResult === 'ok' ? 'Configuración guardada correctamente.' : 'Error al guardar. Intenta nuevamente.'}
+          </div>
+        )}
+
+        <Button onClick={handleSaveFacturacion} disabled={factGuardando} className="w-full">
+          <Save size={15} />
+          {factGuardando ? 'Guardando...' : 'Guardar Configuración'}
+        </Button>
       </Card>
 
       {/* Documentos */}

@@ -1,8 +1,10 @@
-import { Clock, Calendar as CalendarIcon, Info, CheckCircle2, XCircle, Activity, Stethoscope } from 'lucide-react'
+import { useState } from 'react'
+import { Clock, Calendar as CalendarIcon, Info, CheckCircle2, XCircle, Activity, Stethoscope, Receipt } from 'lucide-react'
 import { format, isPast, startOfDay } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { codigosOperaciones } from '../../../data/codigosOperaciones'
 import Modal from '../../../components/common/Modal'
+import ModalEmitirDTE from '../../../components/facturacion/ModalEmitirDTE'
 
 export default function ModalDetallesSlot({
   isOpen,
@@ -18,6 +20,7 @@ export default function ModalDetallesSlot({
   completarCirugia,
   onCancelarCirugia,
 }) {
+  const [showDTE, setShowDTE] = useState(false)
   return (
     <Modal
       isOpen={isOpen}
@@ -197,7 +200,29 @@ export default function ModalDetallesSlot({
                       Cancelar Cirugía
                     </button>
                   )}
+
+                  {/* Botón emitir DTE — disponible en cualquier estado */}
+                  <button
+                    onClick={() => setShowDTE(true)}
+                    className="w-full py-2 sm:py-2.5 px-3 sm:px-4 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs sm:text-sm font-bold rounded-lg sm:rounded-xl border border-emerald-200 transition-colors flex items-center justify-center gap-2 touch-manipulation"
+                  >
+                    <Receipt size={16} />
+                    Emitir Boleta / Factura
+                  </button>
                 </div>
+              )}
+
+              {/* Modal DTE */}
+              {showDTE && (
+                <ModalEmitirDTE
+                  surgery={{
+                    id: slotDetalle.data.id,
+                    surgery_request_id: slotDetalle.data.surgery_request_id,
+                    codigo_operacion: slotDetalle.data.surgery_requests?.codigo_operacion,
+                    patient: slotDetalle.data.patients,
+                  }}
+                  onClose={() => setShowDTE(false)}
+                />
               )}
 
               {/* Historial */}
