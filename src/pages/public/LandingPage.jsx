@@ -274,15 +274,15 @@ export default function LandingPage() {
               Solicitar demo gratuita
               <ArrowRight className="w-4 h-4" aria-hidden="true" />
             </Link>
-            <Link
-              to="/acceso"
+            <a
+              href="#precios"
               className="inline-flex items-center justify-center gap-2 bg-white/10 hover:bg-white/20 text-white font-bold px-8 py-4 rounded-xl text-base transition-all border border-white/20"
             >
-              Ver demo ahora
-            </Link>
+              Ver precios
+            </a>
           </div>
           <p className="text-slate-500 text-sm mt-6">
-            Demo disponible · Sin tarjeta de crédito · Instalación en 1 día
+            Sin tarjeta de crédito · Instalación en 1 día · Soporte incluido
           </p>
         </div>
       </section>
