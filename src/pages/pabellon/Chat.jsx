@@ -59,16 +59,7 @@ export default function Chat() {
     refetchInterval: 15000,
   })
 
-  // Realtime: refetch threads on new message
-  useEffect(() => {
-    const channel = supabase
-      .channel('chat-threads-pabellon')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages' }, () => {
-        queryClient.invalidateQueries({ queryKey: ['chat-threads'] })
-      })
-      .subscribe()
-    return () => { supabase.removeChannel(channel) }
-  }, [queryClient])
+  // Chat actualiza via polling (refetchInterval: 15000)
 
   const cardBg = dark ? 'bg-slate-800 border-slate-700' : 'bg-white border-slate-200'
   const textPrimary = dark ? 'text-white' : 'text-slate-900'

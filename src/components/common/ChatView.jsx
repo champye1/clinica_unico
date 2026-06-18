@@ -19,6 +19,7 @@ export default function ChatView({ senderRole, surgeryRequestId = null }) {
 
   const { data: messages = [], isLoading } = useQuery({
     queryKey: ['chat-messages', surgeryRequestId],
+    refetchInterval: 10000,
     queryFn: async () => {
       let q = supabase
         .from('chat_messages')
@@ -41,28 +42,7 @@ export default function ChatView({ senderRole, surgeryRequestId = null }) {
     },
   })
 
-  // Realtime subscription
-  useEffect(() => {
-    const channel = supabase
-      .channel(`chat-${surgeryRequestId ?? 'general'}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'chat_messages',
-          filter: surgeryRequestId
-            ? `surgery_request_id=eq.${surgeryRequestId}`
-            : 'surgery_request_id=is.null',
-        },
-        () => {
-          queryClient.invalidateQueries({ queryKey: ['chat-messages', surgeryRequestId] })
-        }
-      )
-      .subscribe()
-
-    return () => { supabase.removeChannel(channel) }
-  }, [surgeryRequestId, queryClient])
+  // Chat actualiza via polling (refetchInterval en la query)
 
   // Scroll to bottom on new messages
   useEffect(() => {

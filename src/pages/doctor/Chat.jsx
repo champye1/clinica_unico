@@ -85,16 +85,7 @@ export default function Chat() {
     refetchInterval: 15000,
   })
 
-  useEffect(() => {
-    if (!doctor?.id) return
-    const channel = supabase
-      .channel('doctor-chat-threads')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages' }, () => {
-        queryClient.invalidateQueries({ queryKey: ['doctor-chat-threads', doctor.id] })
-      })
-      .subscribe()
-    return () => { supabase.removeChannel(channel) }
-  }, [doctor?.id, queryClient])
+  // Chat actualiza via polling (refetchInterval: 15000)
 
   const totalUnread = threads.reduce((acc, t) => acc + t.unread, 0)
   const selectedKey = selectedRequest ?? '__general__'
