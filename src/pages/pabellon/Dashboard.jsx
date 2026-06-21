@@ -131,7 +131,7 @@ export default function Dashboard() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('surgery_supplies')
-        .select('cantidad, supplies:supply_id(nombre, unidad)')
+        .select('cantidad, supplies:supply_id(nombre, unidad_medida)')
         .eq('surgery_id', expandedCirugiaHoyId)
       if (error) throw error
       return data || []
